@@ -720,7 +720,7 @@
                 // 旧実装（2.0 + v×5.0）との比較:
                 // - 静止点: 2.0 → 1.5 (25%縮小)
                 // - 高速点: 7.0 → 4.5 (36%縮小)
-                float baseSize = 1.6 + avgSpeed * 3.0;
+                float baseSize = 1.5 + avgSpeed * 3.0;
                 gl_PointSize = baseSize * u_pixelRatio * zoom;
                 
                 // 色の計算
