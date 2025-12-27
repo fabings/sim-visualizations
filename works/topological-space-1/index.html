@@ -143,9 +143,9 @@
             <div class="control-group">
                 <label>
                     遷移鋭敏度 <span class="math">k</span>
-                    <span class="value-display" id="k-value">5.0</span>
+                    <span class="value-display" id="k-value">10.0</span>
                 </label>
-                <input type="range" id="k-slider" min="0.5" max="20" step="0.1" value="5">
+                <input type="range" id="k-slider" min="0.5" max="20" step="0.1" value="10">
                 <div class="info">σ(t) = ½(1 + tanh(k(t-½))) による滑らかな遷移</div>
             </div>
         </div>
@@ -156,34 +156,34 @@
             <div class="control-group">
                 <label>
                     複素パラメータ <span class="math">c</span> (実部)
-                    <span class="value-display" id="c-real-value">0.50</span>
+                    <span class="value-display" id="c-real-value">2.00</span>
                 </label>
-                <input type="range" id="c-real" min="-2" max="2" step="0.01" value="0.5">
+                <input type="range" id="c-real" min="-2" max="2" step="0.01" value="2.0">
             </div>
 
             <div class="control-group">
                 <label>
                     複素パラメータ <span class="math">c</span> (虚部)
-                    <span class="value-display" id="c-imag-value">0.50</span>
+                    <span class="value-display" id="c-imag-value">-2.00</span>
                 </label>
-                <input type="range" id="c-imag" min="-2" max="2" step="0.01" value="0.5">
+                <input type="range" id="c-imag" min="-2" max="2" step="0.01" value="-2.0">
             </div>
 
             <div class="control-group">
                 <label>
                     実数振幅 <span class="math">r</span>
-                    <span class="value-display" id="r-value">2.80</span>
+                    <span class="value-display" id="r-value">4.00</span>
                 </label>
-                <input type="range" id="r-slider" min="0.5" max="4" step="0.01" value="2.8">
+                <input type="range" id="r-slider" min="0.5" max="4" step="0.01" value="4.0">
                 <div class="info">f_ℝ(x) = r·sin(πx)</div>
             </div>
 
             <div class="control-group">
                 <label>
                     スケール <span class="math">λ</span>
-                    <span class="value-display" id="lambda-value">2.00</span>
+                    <span class="value-display" id="lambda-value">1.10</span>
                 </label>
-                <input type="range" id="lambda-slider" min="0.5" max="5" step="0.1" value="2">
+                <input type="range" id="lambda-slider" min="0.5" max="5" step="0.01" value="1.10">
                 <div class="info">f_ℂ(z) = c·exp(z/λ)</div>
             </div>
         </div>
@@ -194,25 +194,25 @@
             <div class="control-group">
                 <label>
                     反復回数
-                    <span class="value-display" id="iter-value">150</span>
+                    <span class="value-display" id="iter-value">50</span>
                 </label>
-                <input type="range" id="iterations" min="50" max="500" step="10" value="150">
+                <input type="range" id="iterations" min="50" max="500" step="10" value="50">
             </div>
 
             <div class="control-group">
                 <label>
                     粒子密度
-                    <span class="value-display" id="particles-value">20000</span>
+                    <span class="value-display" id="particles-value">50000</span>
                 </label>
-                <input type="range" id="particle-count" min="5000" max="50000" step="1000" value="20000">
+                <input type="range" id="particle-count" min="5000" max="50000" step="1000" value="50000">
             </div>
 
             <div class="control-group">
                 <label>
                     時間速度
-                    <span class="value-display" id="speed-value">0.005</span>
+                    <span class="value-display" id="speed-value">0.020</span>
                 </label>
-                <input type="range" id="speed-slider" min="0" max="0.02" step="0.001" value="0.005">
+                <input type="range" id="speed-slider" min="0" max="0.02" step="0.001" value="0.020">
             </div>
         </div>
 
@@ -447,11 +447,15 @@
         const iterationsLoc = gl.getUniformLocation(program, 'u_iterations');
         const timeLoc = gl.getUniformLocation(program, 'u_time');
 
-        // Initialize particles
-        let particleCount = 20000;
+        // 粒子システムの初期化
+        let particleCount = 50000; // 初期粒子密度
         let particles;
         let initialPosBuffer;
 
+        /**
+         * 粒子の初期位置を生成し、バッファを更新
+         * @param {number} count - 粒子数
+         */
         function initParticles(count) {
             particleCount = count;
             particles = new Float32Array(count * 2);
@@ -473,17 +477,28 @@
 
         initParticles(particleCount);
 
-        // Parameters
+        /**
+         * 位相空間パラメータの初期値設定
+         * 
+         * t: 位相遷移パラメータ [0,1] (0=実数空間, 1=複素空間)
+         * k: 遷移の鋭敏度（大きいほど急峻な遷移）
+         * cReal, cImag: 複素パラメータ c の実部・虚部
+         * r: 実数力学系の振幅パラメータ
+         * lambda: 複素力学系のスケールパラメータ
+         * iterations: 軌道計算の反復回数
+         * speed: 自動アニメーションの速度
+         * animating: 自動アニメーションの有効/無効
+         */
         let params = {
-            t: 0.5,
-            k: 5.0,
-            cReal: 0.5,
-            cImag: 0.5,
-            r: 2.8,
-            lambda: 2.0,
-            iterations: 150,
-            speed: 0.005,
-            animating: false
+            t: 0.5,           // 位相遷移パラメータ（中間状態）
+            k: 10.0,          // 遷移鋭敏度
+            cReal: 2.0,       // 複素パラメータ c の実部
+            cImag: -2.0,      // 複素パラメータ c の虚部
+            r: 4.0,           // 実数振幅
+            lambda: 1.10,     // スケール λ
+            iterations: 50,   // 反復回数
+            speed: 0.020,     // 時間速度
+            animating: false  // アニメーション状態
         };
 
         let time = 0;

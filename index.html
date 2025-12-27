@@ -516,77 +516,93 @@
 
     <script>
         /**
-         * 作品設定
-         * 
-         * 新しい作品を追加する際は、このworksConfig配列に新しいオブジェクトを追加してください。
-         * 
-         * 各作品のプロパティ:
-         * - id: 一意の識別子（URL pathにも使用）
-         * - title: 作品のタイトル
-         * - description: 作品の説明
-         * - path: 作品ページへの相対パス
-         * - tags: カテゴリタグの配列
-         * - date: 作成日（YYYY-MM-DD形式）
-         * - thumbnail: サムネイル画像のパス（オプション）
-         * - icon: アイコン（絵文字やUnicode記号、thumbnailがない場合に表示）
-         */
-        const worksConfig = [
-            {
-                id: 'topological-space-1',
-                title: 'Euler Topology: ℝ ⟷ ℂ Continuum',
-                description: '実数空間と複素空間の間の位相的連続性を、オイラーの公式を通じて可視化。力学系のパラメータ空間における滑らかな遷移をリアルタイムで探索できます。',
-                path: './works/topological-space-1/index.html',
-                tags: ['Topology', 'Complex Analysis', 'Dynamical Systems', 'WebGL'],
-                date: '2025-01-01',
-                thumbnail: null,
-                icon: '∮'
-            },
-            // 新しい作品をここに追加
-            // {
-            //     id: 'example-work-2',
-            //     title: 'Example Work 2',
-            //     description: 'Description of the second work...',
-            //     path: './works/example-work-2/index.html',
-            //     tags: ['Tag1', 'Tag2'],
-            //     date: '2025-01-15',
-            //     thumbnail: './works/example-work-2/thumbnail.png',
-            //     icon: '∫'
-            // },
-        ];
-
-        /**
          * アプリケーション状態
          */
         const appState = {
-            works: [...worksConfig],
+            works: [],
             currentFilter: 'all',
             currentSort: 'date-desc',
-            allTags: new Set()
+            allTags: new Set(),
+            isLoading: true,
+            metadata: null
         };
 
         /**
          * 初期化
          */
-        function init() {
-            // タグの収集
-            worksConfig.forEach(work => {
-                work.tags.forEach(tag => appState.allTags.add(tag));
-            });
+        async function init() {
+            try {
+                // metadata.json から作品データを読み込み
+                await loadMetadata();
+                
+                // タグの収集
+                appState.works.forEach(work => {
+                    work.tags.forEach(tag => appState.allTags.add(tag));
+                });
 
-            // UI の初期化
-            updateStats();
-            renderFilterTags();
-            renderWorks();
+                // UI の初期化
+                updateStats();
+                renderFilterTags();
+                renderWorks();
 
-            // イベントリスナーの設定
-            document.getElementById('sort-select').addEventListener('change', handleSortChange);
+                // イベントリスナーの設定
+                document.getElementById('sort-select').addEventListener('change', handleSortChange);
+
+                console.log(`✅ ${appState.works.length} 作品を読み込みました`);
+
+            } catch (error) {
+                console.error('❌ メタデータの読み込みに失敗:', error);
+                showErrorMessage('作品データの読み込みに失敗しました。');
+            }
+        }
+
+        /**
+         * メタデータの読み込み
+         */
+        async function loadMetadata() {
+            try {
+                const response = await fetch('./metadata.json');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                if (!data.works || !Array.isArray(data.works)) {
+                    throw new Error('不正なデータ形式: works配列が見つかりません');
+                }
+
+                appState.works = data.works;
+                appState.metadata = data.meta;
+                appState.isLoading = false;
+
+            } catch (error) {
+                appState.isLoading = false;
+                throw error;
+            }
+        }
+
+        /**
+         * エラーメッセージの表示
+         */
+        function showErrorMessage(message) {
+            const emptyState = document.getElementById('empty-state');
+            emptyState.style.display = 'block';
+            emptyState.innerHTML = `
+                <div class="empty-state-icon">⚠</div>
+                <p style="color: var(--accent-tertiary);">${message}</p>
+                <p style="font-size: 0.85rem; margin-top: 0.5rem;">
+                    metadata.json ファイルを確認してください。
+                </p>
+            `;
         }
 
         /**
          * 統計情報の更新
          */
         function updateStats() {
-            document.getElementById('total-works').textContent = worksConfig.length;
+            document.getElementById('total-works').textContent = appState.works.length;
             document.getElementById('total-tags').textContent = appState.allTags.size;
         }
 
@@ -641,9 +657,9 @@
          */
         function filterWorks() {
             if (appState.currentFilter === 'all') {
-                return [...worksConfig];
+                return [...appState.works];
             }
-            return worksConfig.filter(work => work.tags.includes(appState.currentFilter));
+            return appState.works.filter(work => work.tags.includes(appState.currentFilter));
         }
 
         /**

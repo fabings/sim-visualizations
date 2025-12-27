@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "generated": "2025-12-28T00:00:00Z",
+    "version": "1.0.0",
+    "description": "Simulation Visualizations - 作品メタデータ"
+  },
+  "works": [
+    {
+      "id": "topological-space-1",
+      "title": "Euler Topology: ℝ ⟷ ℂ Continuum",
+      "description": "実数空間と複素空間の間の位相的連続性を、オイラーの公式を通じて可視化。力学系のパラメータ空間における滑らかな遷移をリアルタイムで探索できます。",
+      "path": "./works/topological-space-1/index.html",
+      "tags": ["Topology", "Complex Analysis", "Dynamical Systems", "WebGL"],
+      "date": "2025-01-01",
+      "thumbnail": null,
+      "icon": "∮"
+    }
+  ]
+}
+
