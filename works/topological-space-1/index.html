@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euler Topology: ℝ ⟷ ℂ Continuum</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border: 2px solid #00ffff;
+            border-radius: 8px;
+            max-width: 380px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+        h2 {
+            color: #00ffff;
+            font-size: 16px;
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0, 50, 50, 0.3);
+            border-left: 3px solid #00ff88;
+        }
+        .section-title {
+            color: #00ff88;
+            font-size: 12px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .control-group {
+            margin: 12px 0;
+        }
+        label {
+            display: block;
+            color: #aaa;
+            font-size: 11px;
+            margin-bottom: 5px;
+        }
+        .math {
+            color: #ffaa00;
+            font-style: italic;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            outline: none;
+            border-radius: 2px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #00ffff;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        .value-display {
+            color: #00ffff;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        .info {
+            font-size: 9px;
+            color: #666;
+            margin-top: 5px;
+            line-height: 1.4;
+            font-style: italic;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 15px;
+            background: linear-gradient(135deg, #00ffff, #00ff88);
+            border: none;
+            border-radius: 4px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        button:hover {
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
+        }
+        #topology-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border: 2px solid #ff00ff;
+            border-radius: 8px;
+            max-width: 380px;
+            color: #ff00ff;
+            font-size: 10px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div id="controls">
+        <h2>位相的パラメータ空間</h2>
+        
+        <div class="section">
+            <div class="section-title">位相遷移パラメータ</div>
+            
+            <div class="control-group">
+                <label>
+                    <span class="math">t</span> ∈ [0,1]: 実数性 ⟷ 複素性
+                    <span class="value-display" id="t-value">0.50</span>
+                </label>
+                <input type="range" id="t-slider" min="0" max="1" step="0.001" value="0.5">
+                <div class="info">t=0: ℝ上の三角力学系 | t=1: ℂ上の指数力学系</div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    遷移鋭敏度 <span class="math">k</span>
+                    <span class="value-display" id="k-value">5.0</span>
+                </label>
+                <input type="range" id="k-slider" min="0.5" max="20" step="0.1" value="5">
+                <div class="info">σ(t) = ½(1 + tanh(k(t-½))) による滑らかな遷移</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">力学系パラメータ</div>
+            
+            <div class="control-group">
+                <label>
+                    複素パラメータ <span class="math">c</span> (実部)
+                    <span class="value-display" id="c-real-value">0.50</span>
+                </label>
+                <input type="range" id="c-real" min="-2" max="2" step="0.01" value="0.5">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    複素パラメータ <span class="math">c</span> (虚部)
+                    <span class="value-display" id="c-imag-value">0.50</span>
+                </label>
+                <input type="range" id="c-imag" min="-2" max="2" step="0.01" value="0.5">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    実数振幅 <span class="math">r</span>
+                    <span class="value-display" id="r-value">2.80</span>
+                </label>
+                <input type="range" id="r-slider" min="0.5" max="4" step="0.01" value="2.8">
+                <div class="info">f_ℝ(x) = r·sin(πx)</div>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    スケール <span class="math">λ</span>
+                    <span class="value-display" id="lambda-value">2.00</span>
+                </label>
+                <input type="range" id="lambda-slider" min="0.5" max="5" step="0.1" value="2">
+                <div class="info">f_ℂ(z) = c·exp(z/λ)</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">可視化設定</div>
+            
+            <div class="control-group">
+                <label>
+                    反復回数
+                    <span class="value-display" id="iter-value">150</span>
+                </label>
+                <input type="range" id="iterations" min="50" max="500" step="10" value="150">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    粒子密度
+                    <span class="value-display" id="particles-value">20000</span>
+                </label>
+                <input type="range" id="particle-count" min="5000" max="50000" step="1000" value="20000">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    時間速度
+                    <span class="value-display" id="speed-value">0.005</span>
+                </label>
+                <input type="range" id="speed-slider" min="0" max="0.02" step="0.001" value="0.005">
+            </div>
+        </div>
+
+        <button id="animate-btn">自動遷移アニメーション</button>
+    </div>
+
+    <div id="topology-info">
+        <strong>位相的構造:</strong><br>
+        F_t(z) = e^(iπt) · [(1-σ(t))·sin(πz) + σ(t)·c·exp(z/λ)]<br><br>
+        <strong>オイラー接続:</strong> e^(iθ) = cos(θ) + i·sin(θ)<br>
+        <strong>商空間:</strong> ℝ/2πℤ ≅ S¹ ⊂ ℂ<br>
+        <strong>解析接続:</strong> 実軸制限 → 複素平面全体
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2', { 
+            antialias: true,
+            alpha: false,
+            premultipliedAlpha: false
+        });
+        
+        if (!gl) {
+            alert('WebGL2 not supported');
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Vertex shader with topological dynamics
+        const vertexShaderSource = `#version 300 es
+            precision highp float;
+            
+            in vec2 a_initialPos;
+            
+            uniform float u_t;
+            uniform float u_k;
+            uniform vec2 u_c;
+            uniform float u_r;
+            uniform float u_lambda;
+            uniform int u_iterations;
+            uniform float u_time;
+            
+            out vec4 v_color;
+            out float v_speed;
+            
+            const float PI = 3.14159265359;
+            const float TAU = 6.28318530718;
+            
+            // 滑らかな遷移関数 σ(t) = ½(1 + tanh(k(t-½)))
+            float sigma(float t, float k) {
+                float x = k * (t - 0.5);
+                return 0.5 * (1.0 + tanh(x));
+            }
+            
+            // 複素数演算
+            vec2 complexMul(vec2 a, vec2 b) {
+                return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+            }
+            
+            vec2 complexExp(vec2 z) {
+                float r = exp(z.x);
+                return vec2(r * cos(z.y), r * sin(z.y));
+            }
+            
+            // 実数力学系: f_ℝ(x) = r·sin(πx)
+            float realDynamics(float x, float r) {
+                return r * sin(PI * x);
+            }
+            
+            // 複素力学系: f_ℂ(z) = c·exp(z/λ)
+            vec2 complexDynamics(vec2 z, vec2 c, float lambda) {
+                vec2 scaled = z / lambda;
+                vec2 expZ = complexExp(scaled);
+                return complexMul(c, expZ);
+            }
+            
+            // オイラー位相回転: e^(iπt)
+            vec2 eulerRotation(float t) {
+                return vec2(cos(PI * t), sin(PI * t));
+            }
+            
+            // 統一力学系 F_t(z)
+            vec2 unifiedDynamics(vec2 z, float t, float k, vec2 c, float r, float lambda) {
+                float s = sigma(t, k);
+                
+                // 実数成分（実軸への射影で計算）
+                float realPart = realDynamics(z.x, r);
+                vec2 realContribution = vec2(realPart, z.y * 0.98);
+                
+                // 複素成分
+                vec2 complexContribution = complexDynamics(z, c, lambda);
+                
+                // 補間
+                vec2 interpolated = mix(realContribution, complexContribution, s);
+                
+                // オイラー位相回転を適用
+                vec2 rotation = eulerRotation(t);
+                return complexMul(interpolated, rotation);
+            }
+            
+            // 軌道の色相計算
+            vec3 orbitColor(vec2 z, int escapeIter, int maxIter, float speed) {
+                float hue = float(escapeIter) / float(maxIter);
+                hue = mod(hue + u_time * 0.1, 1.0);
+                
+                // 速度に基づく彩度
+                float saturation = clamp(speed * 2.0, 0.3, 1.0);
+                
+                // 位置に基づく明度
+                float brightness = 0.5 + 0.5 * sin(length(z) * 2.0 + u_time);
+                
+                // HSV to RGB
+                float c = brightness * saturation;
+                float x = c * (1.0 - abs(mod(hue * 6.0, 2.0) - 1.0));
+                float m = brightness - c;
+                
+                vec3 rgb;
+                if (hue < 1.0/6.0) rgb = vec3(c, x, 0);
+                else if (hue < 2.0/6.0) rgb = vec3(x, c, 0);
+                else if (hue < 3.0/6.0) rgb = vec3(0, c, x);
+                else if (hue < 4.0/6.0) rgb = vec3(0, x, c);
+                else if (hue < 5.0/6.0) rgb = vec3(x, 0, c);
+                else rgb = vec3(c, 0, x);
+                
+                return rgb + m;
+            }
+            
+            void main() {
+                vec2 z = a_initialPos;
+                vec2 prevZ = z;
+                int escapeIter = u_iterations;
+                float totalSpeed = 0.0;
+                
+                // 軌道の反復計算
+                for (int i = 0; i < 500; i++) {
+                    if (i >= u_iterations) break;
+                    
+                    prevZ = z;
+                    z = unifiedDynamics(z, u_t, u_k, u_c, u_r, u_lambda);
+                    
+                    // 速度計算
+                    float speed = length(z - prevZ);
+                    totalSpeed += speed;
+                    
+                    // 発散判定
+                    if (length(z) > 10.0) {
+                        escapeIter = i;
+                        break;
+                    }
+                }
+                
+                float avgSpeed = totalSpeed / float(u_iterations);
+                v_speed = avgSpeed;
+                
+                // 位置を画面座標に変換（適応的スケーリング）
+                float scale = 0.2 / (1.0 + length(z) * 0.1);
+                vec2 pos = z * scale;
+                
+                gl_Position = vec4(pos, 0.0, 1.0);
+                gl_PointSize = 2.0 + avgSpeed * 5.0;
+                
+                // 色の計算
+                vec3 color = orbitColor(z, escapeIter, u_iterations, avgSpeed);
+                float alpha = clamp(1.0 - length(z) * 0.1, 0.3, 0.9);
+                
+                v_color = vec4(color, alpha);
+            }
+        `;
+
+        const fragmentShaderSource = `#version 300 es
+            precision highp float;
+            
+            in vec4 v_color;
+            in float v_speed;
+            out vec4 fragColor;
+            
+            void main() {
+                vec2 coord = gl_PointCoord - vec2(0.5);
+                float dist = length(coord);
+                
+                if (dist > 0.5) discard;
+                
+                // ガウシアンフォールオフ
+                float intensity = exp(-dist * dist * 8.0);
+                
+                // 速度に基づくグロー
+                vec3 glow = v_color.rgb * intensity * (1.0 + v_speed * 2.0);
+                
+                fragColor = vec4(glow, v_color.a * intensity);
+            }
+        `;
+
+        // Shader compilation
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program linking error:', gl.getProgramInfoLog(program));
+        }
+
+        // Get locations
+        const initialPosLoc = gl.getAttribLocation(program, 'a_initialPos');
+        const tLoc = gl.getUniformLocation(program, 'u_t');
+        const kLoc = gl.getUniformLocation(program, 'u_k');
+        const cLoc = gl.getUniformLocation(program, 'u_c');
+        const rLoc = gl.getUniformLocation(program, 'u_r');
+        const lambdaLoc = gl.getUniformLocation(program, 'u_lambda');
+        const iterationsLoc = gl.getUniformLocation(program, 'u_iterations');
+        const timeLoc = gl.getUniformLocation(program, 'u_time');
+
+        // Initialize particles
+        let particleCount = 20000;
+        let particles;
+        let initialPosBuffer;
+
+        function initParticles(count) {
+            particleCount = count;
+            particles = new Float32Array(count * 2);
+            
+            // 初期位置を円形に配置（位相的に意味のある配置）
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2;
+                const radius = Math.sqrt(i / count) * 2.5;
+                particles[i * 2] = Math.cos(angle) * radius;
+                particles[i * 2 + 1] = Math.sin(angle) * radius;
+            }
+
+            if (initialPosBuffer) gl.deleteBuffer(initialPosBuffer);
+            
+            initialPosBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, initialPosBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, particles, gl.STATIC_DRAW);
+        }
+
+        initParticles(particleCount);
+
+        // Parameters
+        let params = {
+            t: 0.5,
+            k: 5.0,
+            cReal: 0.5,
+            cImag: 0.5,
+            r: 2.8,
+            lambda: 2.0,
+            iterations: 150,
+            speed: 0.005,
+            animating: false
+        };
+
+        let time = 0;
+
+        // UI Controls
+        const controls = {
+            t: document.getElementById('t-slider'),
+            k: document.getElementById('k-slider'),
+            cReal: document.getElementById('c-real'),
+            cImag: document.getElementById('c-imag'),
+            r: document.getElementById('r-slider'),
+            lambda: document.getElementById('lambda-slider'),
+            iterations: document.getElementById('iterations'),
+            particles: document.getElementById('particle-count'),
+            speed: document.getElementById('speed-slider'),
+            animateBtn: document.getElementById('animate-btn')
+        };
+
+        controls.t.addEventListener('input', (e) => {
+            params.t = parseFloat(e.target.value);
+            document.getElementById('t-value').textContent = params.t.toFixed(3);
+        });
+
+        controls.k.addEventListener('input', (e) => {
+            params.k = parseFloat(e.target.value);
+            document.getElementById('k-value').textContent = params.k.toFixed(1);
+        });
+
+        controls.cReal.addEventListener('input', (e) => {
+            params.cReal = parseFloat(e.target.value);
+            document.getElementById('c-real-value').textContent = params.cReal.toFixed(2);
+        });
+
+        controls.cImag.addEventListener('input', (e) => {
+            params.cImag = parseFloat(e.target.value);
+            document.getElementById('c-imag-value').textContent = params.cImag.toFixed(2);
+        });
+
+        controls.r.addEventListener('input', (e) => {
+            params.r = parseFloat(e.target.value);
+            document.getElementById('r-value').textContent = params.r.toFixed(2);
+        });
+
+        controls.lambda.addEventListener('input', (e) => {
+            params.lambda = parseFloat(e.target.value);
+            document.getElementById('lambda-value').textContent = params.lambda.toFixed(2);
+        });
+
+        controls.iterations.addEventListener('input', (e) => {
+            params.iterations = parseInt(e.target.value);
+            document.getElementById('iter-value').textContent = params.iterations;
+        });
+
+        controls.particles.addEventListener('input', (e) => {
+            const newCount = parseInt(e.target.value);
+            document.getElementById('particles-value').textContent = newCount;
+            initParticles(newCount);
+        });
+
+        controls.speed.addEventListener('input', (e) => {
+            params.speed = parseFloat(e.target.value);
+            document.getElementById('speed-value').textContent = params.speed.toFixed(3);
+        });
+
+        controls.animateBtn.addEventListener('click', () => {
+            params.animating = !params.animating;
+            controls.animateBtn.textContent = params.animating ? '停止' : '自動遷移アニメーション';
+        });
+
+        // Render loop
+        function render() {
+            time += 0.01;
+            
+            // Auto-animation
+            if (params.animating) {
+                params.t = 0.5 + 0.5 * Math.sin(time * params.speed);
+                controls.t.value = params.t;
+                document.getElementById('t-value').textContent = params.t.toFixed(3);
+            }
+            
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+            gl.useProgram(program);
+
+            // Set uniforms
+            gl.uniform1f(tLoc, params.t);
+            gl.uniform1f(kLoc, params.k);
+            gl.uniform2f(cLoc, params.cReal, params.cImag);
+            gl.uniform1f(rLoc, params.r);
+            gl.uniform1f(lambdaLoc, params.lambda);
+            gl.uniform1i(iterationsLoc, params.iterations);
+            gl.uniform1f(timeLoc, time);
+
+            // Bind attributes
+            gl.bindBuffer(gl.ARRAY_BUFFER, initialPosBuffer);
+            gl.enableVertexAttribArray(initialPosLoc);
+            gl.vertexAttribPointer(initialPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+            // Draw
+            gl.drawArrays(gl.POINTS, 0, particleCount);
+
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Visualizations - 数理的シミュレーション作品集</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a28;
+            --accent-primary: #00ffff;
+            --accent-secondary: #00ff88;
+            --accent-tertiary: #ff00ff;
+            --text-primary: #e0e0ff;
+            --text-secondary: #a0a0c0;
+            --text-muted: #606080;
+            --border-color: rgba(0, 255, 255, 0.2);
+            --shadow-glow: rgba(0, 255, 255, 0.15);
+        }
+
+        body {
+            font-family: 'Courier New', 'Consolas', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 背景アニメーション */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(0, 255, 255, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 0, 255, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(0, 255, 136, 0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* ヘッダー */
+        header {
+            padding: 4rem 2rem 3rem;
+            text-align: center;
+            border-bottom: 2px solid var(--border-color);
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 2px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                var(--accent-primary) 30%, 
+                var(--accent-secondary) 50%, 
+                var(--accent-tertiary) 70%, 
+                transparent 100%);
+            box-shadow: 0 0 20px var(--shadow-glow);
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary), var(--accent-tertiary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: titleGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes titleGlow {
+            0%, 100% {
+                filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.3));
+            }
+            50% {
+                filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.6));
+            }
+        }
+
+        .subtitle {
+            font-size: clamp(0.9rem, 2vw, 1.2rem);
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            letter-spacing: 1px;
+        }
+
+        .description {
+            font-size: clamp(0.85rem, 1.5vw, 1rem);
+            color: var(--text-muted);
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        /* メインコンテンツ */
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+        }
+
+        /* 統計情報 */
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1.5rem 2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            min-width: 150px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-item:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 20px var(--shadow-glow);
+            transform: translateY(-3px);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* フィルター/ソート */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .filter-tags {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tag-filter {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+
+        .tag-filter:hover,
+        .tag-filter.active {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 15px var(--shadow-glow);
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .sort-controls label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .sort-controls select {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 4px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sort-controls select:hover,
+        .sort-controls select:focus {
+            border-color: var(--accent-primary);
+            outline: none;
+        }
+
+        /* 作品グリッド */
+        .works-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        /* 作品カード */
+        .work-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .work-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0) 0%, 
+                rgba(0, 255, 255, 0.05) 50%, 
+                rgba(255, 0, 255, 0.05) 100%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+        }
+
+        .work-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--accent-primary);
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.5),
+                0 0 30px var(--shadow-glow);
+        }
+
+        .work-card:hover::before {
+            opacity: 1;
+        }
+
+        .work-thumbnail {
+            width: 100%;
+            height: 220px;
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.1) 0%, 
+                rgba(255, 0, 255, 0.1) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .work-thumbnail::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 255, 255, 0.03) 2px,
+                    rgba(0, 255, 255, 0.03) 4px
+                );
+            animation: scanline 8s linear infinite;
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(20px); }
+        }
+
+        .work-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+        }
+
+        .work-card:hover .work-thumbnail img {
+            transform: scale(1.1);
+        }
+
+        .work-icon {
+            font-size: 4rem;
+            color: var(--accent-primary);
+            opacity: 0.6;
+            transition: all 0.4s ease;
+        }
+
+        .work-card:hover .work-icon {
+            opacity: 1;
+            transform: rotate(10deg) scale(1.1);
+        }
+
+        .work-content {
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .work-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            color: var(--accent-primary);
+            letter-spacing: 0.5px;
+        }
+
+        .work-description {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            flex: 1;
+            line-height: 1.6;
+        }
+
+        .work-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .work-date {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .work-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .work-tag {
+            padding: 0.3rem 0.8rem;
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: var(--accent-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .work-card:hover .work-tag {
+            background: rgba(0, 255, 255, 0.2);
+            border-color: var(--accent-primary);
+        }
+
+        /* 空状態 */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        /* フッター */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        footer a:hover {
+            color: var(--accent-secondary);
+            text-shadow: 0 0 10px var(--shadow-glow);
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 768px) {
+            .works-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filter-tags {
+                justify-content: center;
+            }
+
+            .sort-controls {
+                justify-content: center;
+            }
+
+            .stats {
+                gap: 1.5rem;
+            }
+        }
+
+        /* ローディングアニメーション */
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .loading {
+            animation: pulse 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Simulation Visualizations</h1>
+        <p class="subtitle">数理的シミュレーションと可視化の探求</p>
+        <p class="description">
+            数学、物理学、計算機科学における複雑な概念を、
+            インタラクティブなビジュアライゼーションとして実装した作品集です。
+        </p>
+    </header>
+
+    <main>
+        <!-- 統計情報 -->
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-number" id="total-works">0</span>
+                <span class="stat-label">Works</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="total-tags">0</span>
+                <span class="stat-label">Categories</span>
+            </div>
+        </div>
+
+        <!-- フィルター・ソートコントロール -->
+        <div class="controls">
+            <div class="filter-tags" id="filter-tags">
+                <!-- 動的に生成 -->
+            </div>
+            <div class="sort-controls">
+                <label for="sort-select">Sort by:</label>
+                <select id="sort-select">
+                    <option value="date-desc">最新順</option>
+                    <option value="date-asc">古い順</option>
+                    <option value="title-asc">タイトル (A-Z)</option>
+                    <option value="title-desc">タイトル (Z-A)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 作品グリッド -->
+        <div class="works-grid" id="works-grid">
+            <!-- 動的に生成 -->
+        </div>
+
+        <!-- 空状態 -->
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <div class="empty-state-icon">∅</div>
+            <p>該当する作品が見つかりませんでした</p>
+        </div>
+    </main>
+
+    <footer>
+        <p>
+            &copy; 2025 Simulation Visualizations |
+            <a href="https://github.com/facad3" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </p>
+    </footer>
+
+    <script>
+        /**
+         * 作品設定
+         * 
+         * 新しい作品を追加する際は、このworksConfig配列に新しいオブジェクトを追加してください。
+         * 
+         * 各作品のプロパティ:
+         * - id: 一意の識別子（URL pathにも使用）
+         * - title: 作品のタイトル
+         * - description: 作品の説明
+         * - path: 作品ページへの相対パス
+         * - tags: カテゴリタグの配列
+         * - date: 作成日（YYYY-MM-DD形式）
+         * - thumbnail: サムネイル画像のパス（オプション）
+         * - icon: アイコン（絵文字やUnicode記号、thumbnailがない場合に表示）
+         */
+        const worksConfig = [
+            {
+                id: 'topological-space-1',
+                title: 'Euler Topology: ℝ ⟷ ℂ Continuum',
+                description: '実数空間と複素空間の間の位相的連続性を、オイラーの公式を通じて可視化。力学系のパラメータ空間における滑らかな遷移をリアルタイムで探索できます。',
+                path: './works/topological-space-1/index.html',
+                tags: ['Topology', 'Complex Analysis', 'Dynamical Systems', 'WebGL'],
+                date: '2025-01-01',
+                thumbnail: null,
+                icon: '∮'
+            },
+            // 新しい作品をここに追加
+            // {
+            //     id: 'example-work-2',
+            //     title: 'Example Work 2',
+            //     description: 'Description of the second work...',
+            //     path: './works/example-work-2/index.html',
+            //     tags: ['Tag1', 'Tag2'],
+            //     date: '2025-01-15',
+            //     thumbnail: './works/example-work-2/thumbnail.png',
+            //     icon: '∫'
+            // },
+        ];
+
+        /**
+         * アプリケーション状態
+         */
+        const appState = {
+            works: [...worksConfig],
+            currentFilter: 'all',
+            currentSort: 'date-desc',
+            allTags: new Set()
+        };
+
+        /**
+         * 初期化
+         */
+        function init() {
+            // タグの収集
+            worksConfig.forEach(work => {
+                work.tags.forEach(tag => appState.allTags.add(tag));
+            });
+
+            // UI の初期化
+            updateStats();
+            renderFilterTags();
+            renderWorks();
+
+            // イベントリスナーの設定
+            document.getElementById('sort-select').addEventListener('change', handleSortChange);
+        }
+
+        /**
+         * 統計情報の更新
+         */
+        function updateStats() {
+            document.getElementById('total-works').textContent = worksConfig.length;
+            document.getElementById('total-tags').textContent = appState.allTags.size;
+        }
+
+        /**
+         * フィルタータグの描画
+         */
+        function renderFilterTags() {
+            const container = document.getElementById('filter-tags');
+            container.innerHTML = '';
+
+            // 「すべて」タグ
+            const allTag = createFilterTag('all', 'All', appState.currentFilter === 'all');
+            container.appendChild(allTag);
+
+            // 各カテゴリタグ
+            Array.from(appState.allTags).sort().forEach(tag => {
+                const tagElement = createFilterTag(tag, tag, appState.currentFilter === tag);
+                container.appendChild(tagElement);
+            });
+        }
+
+        /**
+         * フィルタータグ要素の作成
+         */
+        function createFilterTag(tagId, tagLabel, isActive) {
+            const button = document.createElement('button');
+            button.className = 'tag-filter' + (isActive ? ' active' : '');
+            button.textContent = tagLabel;
+            button.addEventListener('click', () => handleFilterChange(tagId));
+            return button;
+        }
+
+        /**
+         * フィルター変更のハンドラ
+         */
+        function handleFilterChange(tagId) {
+            appState.currentFilter = tagId;
+            renderFilterTags();
+            renderWorks();
+        }
+
+        /**
+         * ソート変更のハンドラ
+         */
+        function handleSortChange(event) {
+            appState.currentSort = event.target.value;
+            renderWorks();
+        }
+
+        /**
+         * 作品のフィルタリング
+         */
+        function filterWorks() {
+            if (appState.currentFilter === 'all') {
+                return [...worksConfig];
+            }
+            return worksConfig.filter(work => work.tags.includes(appState.currentFilter));
+        }
+
+        /**
+         * 作品のソート
+         */
+        function sortWorks(works) {
+            const sorted = [...works];
+            
+            switch (appState.currentSort) {
+                case 'date-desc':
+                    sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    break;
+                case 'date-asc':
+                    sorted.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    break;
+                case 'title-asc':
+                    sorted.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+                case 'title-desc':
+                    sorted.sort((a, b) => b.title.localeCompare(a.title));
+                    break;
+            }
+            
+            return sorted;
+        }
+
+        /**
+         * 作品グリッドの描画
+         */
+        function renderWorks() {
+            const container = document.getElementById('works-grid');
+            const emptyState = document.getElementById('empty-state');
+            
+            // フィルタリングとソート
+            let works = filterWorks();
+            works = sortWorks(works);
+
+            // 空状態の処理
+            if (works.length === 0) {
+                container.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            container.style.display = 'grid';
+            emptyState.style.display = 'none';
+            container.innerHTML = '';
+
+            // 各作品カードを生成
+            works.forEach(work => {
+                const card = createWorkCard(work);
+                container.appendChild(card);
+            });
+        }
+
+        /**
+         * 作品カード要素の作成
+         */
+        function createWorkCard(work) {
+            const card = document.createElement('div');
+            card.className = 'work-card';
+            card.addEventListener('click', () => navigateToWork(work.path));
+
+            // サムネイル部分
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'work-thumbnail';
+            
+            if (work.thumbnail) {
+                const img = document.createElement('img');
+                img.src = work.thumbnail;
+                img.alt = work.title;
+                thumbnail.appendChild(img);
+            } else {
+                const icon = document.createElement('div');
+                icon.className = 'work-icon';
+                icon.textContent = work.icon || '⚡';
+                thumbnail.appendChild(icon);
+            }
+
+            // コンテンツ部分
+            const content = document.createElement('div');
+            content.className = 'work-content';
+
+            // タイトル
+            const title = document.createElement('h3');
+            title.className = 'work-title';
+            title.textContent = work.title;
+
+            // 説明
+            const description = document.createElement('p');
+            description.className = 'work-description';
+            description.textContent = work.description;
+
+            // メタ情報
+            const meta = document.createElement('div');
+            meta.className = 'work-meta';
+            
+            const dateElement = document.createElement('div');
+            dateElement.className = 'work-date';
+            dateElement.innerHTML = `📅 ${formatDate(work.date)}`;
+            
+            meta.appendChild(dateElement);
+
+            // タグ
+            const tags = document.createElement('div');
+            tags.className = 'work-tags';
+            work.tags.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'work-tag';
+                tagElement.textContent = tag;
+                tags.appendChild(tagElement);
+            });
+
+            // 組み立て
+            content.appendChild(title);
+            content.appendChild(description);
+            content.appendChild(meta);
+            content.appendChild(tags);
+
+            card.appendChild(thumbnail);
+            card.appendChild(content);
+
+            return card;
+        }
+
+        /**
+         * 日付のフォーマット
+         */
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        /**
+         * 作品ページへの遷移
+         */
+        function navigateToWork(path) {
+            window.location.href = path;
+        }
+
+        /**
+         * アプリケーション開始
+         */
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
