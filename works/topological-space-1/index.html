@@ -615,8 +615,15 @@
                 // 速度に基づく彩度
                 float saturation = clamp(speed * 2.0, 0.3, 1.0);
                 
-                // 位置に基づく明度
-                float brightness = 0.5 + 0.5 * sin(length(z) * 2.0 + u_time);
+                // 位置に基づく明度（中心部を強調、外側を減衰）
+                // 
+                // 改善点: 外側の粒子の明度を低減
+                // distanceFactor: 中心部で1.0、外側で減衰
+                float dist = length(z);
+                float distanceFactor = 1.0 / (1.0 + dist * 0.3);
+                
+                float baseBrightness = 0.5 + 0.5 * sin(dist * 2.0 + u_time);
+                float brightness = baseBrightness * distanceFactor;
                 
                 // HSV to RGB
                 float c = brightness * saturation;
@@ -662,13 +669,33 @@
                 v_speed = avgSpeed;
                 
                 // 位置を画面座標に変換（適応的スケーリング + アスペクト比補正）
+                // 
+                // ステップ1: 基本的な適応的スケーリング
+                // S(z) = 0.2 / (1 + 0.1|z|)
+                // これにより、遠方の粒子を圧縮して画面内に収める
                 float scale = 0.2 / (1.0 + length(z) * 0.1);
+                
+                // ステップ2: アスペクト比に応じた視野調整
+                // 
+                // 問題: 縦長画面では縦方向の視野が広がり、発散領域が多く見える
+                // 解決: アスペクト比に応じてスケールを調整し、視野を最適化
+                // 
+                // 数学的設計:
+                // - aspect > 1 (横長): x方向の視野が広い → ズーム不要
+                // - aspect < 1 (縦長): y方向の視野が広い → ズームインして中心部を強調
+                // 
+                // ズーム係数:
+                // zoom = max(1.0, 1.0/aspect) の平方根を使用
+                // aspect = 0.5 → zoom = √2 ≈ 1.41 (約1.4倍ズームイン)
+                // aspect = 1.0 → zoom = 1.0 (ズームなし)
+                // aspect = 2.0 → zoom = 1.0 (ズームなし)
+                float zoom = sqrt(max(1.0, 1.0 / u_aspect));
+                scale *= zoom;
+                
                 vec2 pos = z * scale;
                 
-                // アスペクト比補正: 画面の形状に応じて座標を調整
-                // aspect > 1 (横長): x座標を圧縮
-                // aspect < 1 (縦長): y座標を圧縮
-                // これにより、数学的な円が画面上でも円として表示される
+                // ステップ3: アスペクト比補正（円の歪み防止）
+                // NDC上で事前に補正することで、画面上で円が円として表示される
                 if (u_aspect > 1.0) {
                     pos.x /= u_aspect;
                 } else {
@@ -677,14 +704,32 @@
                 
                 gl_Position = vec4(pos, 0.0, 1.0);
                 
-                // 点のサイズ（デバイスピクセル比を考慮）
+                // 点のサイズ（デバイスピクセル比とズームを考慮）
                 // 高DPI画面（Retina等）では自動的に拡大される
+                // ズーム時も適切なサイズを維持
                 float baseSize = 2.0 + avgSpeed * 5.0;
-                gl_PointSize = baseSize * u_pixelRatio;
+                gl_PointSize = baseSize * u_pixelRatio * zoom;
                 
                 // 色の計算
                 vec3 color = orbitColor(z, escapeIter, u_iterations, avgSpeed);
-                float alpha = clamp(1.0 - length(z) * 0.1, 0.3, 0.9);
+                
+                // アルファ値の計算（視野に応じた調整）
+                // 
+                // 基本: 中心部ほど不透明、外側ほど透明
+                // alpha_base = 1.0 - 0.1|z|
+                // 
+                // 追加: ズーム時は外側をより透明に
+                // 縦長画面では上下の発散領域が見えやすいため、
+                // より積極的に透明化して中心部を強調
+                float distanceFromCenter = length(z);
+                float baseAlpha = 1.0 - distanceFromCenter * 0.1;
+                
+                // ズーム係数に応じて透明化を強化
+                // zoom > 1 のとき、外側の粒子をより透明に
+                float zoomFactor = sqrt(max(1.0, 1.0 / u_aspect));
+                float alphaAdjustment = mix(1.0, 0.7, (zoomFactor - 1.0) / 0.5);
+                
+                float alpha = clamp(baseAlpha * alphaAdjustment, 0.2, 0.9);
                 
                 v_color = vec4(color, alpha);
             }
@@ -704,12 +749,26 @@
                 if (dist > 0.5) discard;
                 
                 // ガウシアンフォールオフ
+                // exp(-8d²) により、点の中心から滑らかに減衰
                 float intensity = exp(-dist * dist * 8.0);
                 
                 // 速度に基づくグロー
-                vec3 glow = v_color.rgb * intensity * (1.0 + v_speed * 2.0);
+                // 
+                // 改善: 速度による増幅を制御
+                // 外側の粒子（速度が大きい）の過剰な輝度を抑制
+                // 
+                // 旧実装: (1.0 + v_speed * 2.0)
+                // 新実装: より緩やかな増幅曲線
+                float speedBoost = 1.0 + v_speed * 1.5;
                 
-                fragColor = vec4(glow, v_color.a * intensity);
+                // グロー強度の計算
+                vec3 glow = v_color.rgb * intensity * speedBoost;
+                
+                // 最終的なアルファ値
+                // 頂点シェーダーからのアルファ値にガウシアン強度を掛ける
+                float finalAlpha = v_color.a * intensity;
+                
+                fragColor = vec4(glow, finalAlpha);
             }
         `;
 
