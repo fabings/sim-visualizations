@@ -14,11 +14,16 @@
             background: #000;
             overflow: hidden;
             font-family: 'Courier New', monospace;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
         }
         #canvas {
             display: block;
             width: 100vw;
             height: 100vh;
+            touch-action: none;
         }
         
         /* ハンバーガーボタン共通スタイル */
@@ -163,12 +168,39 @@
         }
         input[type="range"]::-webkit-slider-thumb {
             appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 20px;
+            height: 20px;
             background: #00ffff;
             cursor: pointer;
             border-radius: 50%;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #00ffff;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        
+        /* タッチデバイスでのスライダー操作性向上 */
+        @media (hover: none) {
+            input[type="range"] {
+                height: 8px;
+            }
+            
+            input[type="range"]::-webkit-slider-thumb {
+                width: 28px;
+                height: 28px;
+            }
+            
+            input[type="range"]::-moz-range-thumb {
+                width: 28px;
+                height: 28px;
+            }
         }
         .value-display {
             color: #00ffff;
@@ -184,7 +216,7 @@
         }
         button {
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             margin-top: 15px;
             background: linear-gradient(135deg, #00ffff, #00ff88);
             border: none;
@@ -194,9 +226,23 @@
             cursor: pointer;
             font-size: 12px;
             letter-spacing: 1px;
+            min-height: 44px;
+            transition: all 0.2s ease;
         }
+        
         button:hover {
             box-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
+        }
+        
+        button:active {
+            transform: scale(0.98);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+        }
+        
+        @media (hover: none) {
+            button:hover {
+                box-shadow: none;
+            }
         }
         /* 位相的構造情報パネル（右上から展開） */
         #topology-info {
@@ -437,11 +483,53 @@
             alert('WebGL2 not supported');
         }
 
+        /**
+         * キャンバスのリサイズとアスペクト比の計算
+         * 
+         * WebGLの正規化デバイス座標（NDC）は常に正方形 [-1,1]² だが、
+         * 実際の画面は任意のアスペクト比を持つ長方形である。
+         * 
+         * 問題:
+         * - NDCの正方形が、長方形の画面に引き伸ばされる
+         * - 数学的な円が楕円に歪む
+         * - 対称性が破壊される
+         * 
+         * 解決策:
+         * - devicePixelRatio を考慮した高解像度レンダリング
+         * - アスペクト比 = width / height を計算
+         * - シェーダーで座標補正を行う
+         * 
+         * 数学的効果:
+         * - 等長変換（isometry）ではないが、形状保存変換
+         * - 円環 S¹ の幾何学的性質を保存
+         */
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            const dpr = window.devicePixelRatio || 1;
+            
+            // 物理ピクセルサイズに設定（高DPI対応）
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            
+            // ビューポートも同様に設定
             gl.viewport(0, 0, canvas.width, canvas.height);
         }
+        
+        /**
+         * 現在のアスペクト比を取得
+         * @returns {number} aspect = width / height
+         */
+        function getAspectRatio() {
+            return canvas.width / canvas.height;
+        }
+        
+        /**
+         * デバイスピクセル比を取得
+         * @returns {number} デバイスピクセル比（Retina等では2.0以上）
+         */
+        function getPixelRatio() {
+            return window.devicePixelRatio || 1;
+        }
+        
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
@@ -458,6 +546,8 @@
             uniform float u_lambda;
             uniform int u_iterations;
             uniform float u_time;
+            uniform float u_aspect;
+            uniform float u_pixelRatio;
             
             out vec4 v_color;
             out float v_speed;
@@ -571,12 +661,26 @@
                 float avgSpeed = totalSpeed / float(u_iterations);
                 v_speed = avgSpeed;
                 
-                // 位置を画面座標に変換（適応的スケーリング）
+                // 位置を画面座標に変換（適応的スケーリング + アスペクト比補正）
                 float scale = 0.2 / (1.0 + length(z) * 0.1);
                 vec2 pos = z * scale;
                 
+                // アスペクト比補正: 画面の形状に応じて座標を調整
+                // aspect > 1 (横長): x座標を圧縮
+                // aspect < 1 (縦長): y座標を圧縮
+                // これにより、数学的な円が画面上でも円として表示される
+                if (u_aspect > 1.0) {
+                    pos.x /= u_aspect;
+                } else {
+                    pos.y *= u_aspect;
+                }
+                
                 gl_Position = vec4(pos, 0.0, 1.0);
-                gl_PointSize = 2.0 + avgSpeed * 5.0;
+                
+                // 点のサイズ（デバイスピクセル比を考慮）
+                // 高DPI画面（Retina等）では自動的に拡大される
+                float baseSize = 2.0 + avgSpeed * 5.0;
+                gl_PointSize = baseSize * u_pixelRatio;
                 
                 // 色の計算
                 vec3 color = orbitColor(z, escapeIter, u_iterations, avgSpeed);
@@ -644,6 +748,8 @@
         const lambdaLoc = gl.getUniformLocation(program, 'u_lambda');
         const iterationsLoc = gl.getUniformLocation(program, 'u_iterations');
         const timeLoc = gl.getUniformLocation(program, 'u_time');
+        const aspectLoc = gl.getUniformLocation(program, 'u_aspect');
+        const pixelRatioLoc = gl.getUniformLocation(program, 'u_pixelRatio');
 
         // 粒子システムの初期化
         let particleCount = 25000; // 初期粒子密度
@@ -922,6 +1028,8 @@
             gl.uniform1f(lambdaLoc, params.lambda);
             gl.uniform1i(iterationsLoc, params.iterations);
             gl.uniform1f(timeLoc, time);
+            gl.uniform1f(aspectLoc, getAspectRatio());
+            gl.uniform1f(pixelRatioLoc, getPixelRatio());
 
             // Bind attributes
             gl.bindBuffer(gl.ARRAY_BUFFER, initialPosBuffer);
