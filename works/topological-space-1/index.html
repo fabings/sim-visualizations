@@ -20,16 +20,107 @@
             width: 100vw;
             height: 100vh;
         }
-        #controls {
+        
+        /* ハンバーガーボタン共通スタイル */
+        .menu-toggle {
             position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            z-index: 1001;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .menu-toggle:hover {
+            box-shadow: 0 0 20px;
+            transform: scale(1.05);
+        }
+        
+        .menu-toggle:active {
+            transform: scale(0.95);
+        }
+        
+        .menu-toggle span {
+            width: 28px;
+            height: 3px;
+            background: currentColor;
+            border-radius: 2px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* アクティブ時: ×マークに変形 */
+        .menu-toggle.active span:nth-child(1) {
+            transform: translateY(8px) rotate(45deg);
+        }
+        
+        .menu-toggle.active span:nth-child(2) {
+            opacity: 0;
+            transform: scaleX(0);
+        }
+        
+        .menu-toggle.active span:nth-child(3) {
+            transform: translateY(-8px) rotate(-45deg);
+        }
+        
+        /* コントロールパネル用ハンバーガー（左上） */
+        #controls-toggle {
             top: 20px;
             left: 20px;
-            background: rgba(0, 0, 0, 0.9);
+            border-color: #00ffff;
+            color: #00ffff;
+            z-index: 1002;
+        }
+        
+        #controls-toggle:hover {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+        }
+        
+        /* 位相的構造用ハンバーガー（右上） */
+        #topology-toggle {
+            top: 20px;
+            right: 20px;
+            border-color: #ff00ff;
+            color: #ff00ff;
+            z-index: 1002;
+        }
+        
+        #topology-toggle:hover {
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.6);
+        }
+        
+        /* コントロールパネル（左上から展開） */
+        #controls {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.95);
             padding: 20px;
             border: 2px solid #00ffff;
             border-radius: 8px;
             max-width: 380px;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.4);
+            z-index: 1000;
+            transform-origin: top left;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+        
+        #controls.hidden {
+            transform: translateY(-20px) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
         }
         h2 {
             color: #00ffff;
@@ -107,11 +198,12 @@
         button:hover {
             box-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
         }
+        /* 位相的構造情報パネル（右上から展開） */
         #topology-info {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.9);
+            top: 80px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.95);
             padding: 15px;
             border: 2px solid #ff00ff;
             border-radius: 8px;
@@ -119,12 +211,117 @@
             color: #ff00ff;
             font-size: 10px;
             line-height: 1.6;
+            box-shadow: 0 0 30px rgba(255, 0, 255, 0.4);
+            z-index: 1000;
+            transform-origin: top right;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+        
+        #topology-info.hidden {
+            transform: translateY(-20px) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        
+        /* スクロールバーのスタイル */
+        #controls::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #controls::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+        }
+        
+        #controls::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 255, 0.5);
+            border-radius: 4px;
+        }
+        
+        #controls::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 255, 0.8);
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            .menu-toggle {
+                width: 45px;
+                height: 45px;
+            }
+            
+            #controls {
+                max-width: calc(100vw - 100px);
+                max-height: calc(100vh - 120px);
+            }
+            
+            #topology-info {
+                max-width: calc(100vw - 100px);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .menu-toggle {
+                width: 40px;
+                height: 40px;
+            }
+            
+            .menu-toggle span {
+                width: 24px;
+            }
+            
+            #controls-toggle {
+                top: 15px;
+                left: 15px;
+            }
+            
+            #topology-toggle {
+                top: 15px;
+                right: 15px;
+            }
+            
+            #controls {
+                top: 65px;
+                left: 15px;
+                right: auto;
+                max-width: calc(100vw - 30px);
+                max-height: calc(100vh - 80px);
+            }
+            
+            #topology-info {
+                top: 65px;
+                right: 15px;
+                left: auto;
+                max-width: calc(100vw - 30px);
+                max-height: 50vh;
+            }
+            
+            #controls.hidden,
+            #topology-info.hidden {
+                transform: translateY(-20px) scale(0.9);
+            }
         }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     
+    <!-- ハンバーガーメニューボタン：コントロールパネル -->
+    <div id="controls-toggle" class="menu-toggle">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+    
+    <!-- ハンバーガーメニューボタン：位相的構造 -->
+    <div id="topology-toggle" class="menu-toggle">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+    
+    <!-- コントロールパネル -->
     <div id="controls">
         <h2>位相的パラメータ空間</h2>
         
@@ -218,7 +415,8 @@
 
         <button id="animate-btn">自動遷移アニメーション</button>
     </div>
-
+    
+    <!-- 位相的構造情報パネル -->
     <div id="topology-info">
         <strong>位相的構造:</strong><br>
         F_t(z) = e^(iπt) · [(1-σ(t))·sin(πz) + σ(t)·c·exp(z/λ)]<br><br>
@@ -532,6 +730,56 @@
             speed: document.getElementById('speed-slider'),
             animateBtn: document.getElementById('animate-btn')
         };
+
+        /**
+         * ハンバーガーメニューの制御
+         */
+        const controlsPanel = document.getElementById('controls');
+        const controlsToggle = document.getElementById('controls-toggle');
+        const topologyPanel = document.getElementById('topology-info');
+        const topologyToggle = document.getElementById('topology-toggle');
+
+        // 初期状態の設定（モバイルではデフォルトで閉じる）
+        function initMenuState() {
+            const isMobile = window.innerWidth <= 768;
+            
+            if (isMobile) {
+                controlsPanel.classList.add('hidden');
+                topologyPanel.classList.add('hidden');
+            } else {
+                controlsPanel.classList.remove('hidden');
+                topologyPanel.classList.remove('hidden');
+            }
+        }
+
+        // コントロールパネルのトグル
+        controlsToggle.addEventListener('click', () => {
+            controlsPanel.classList.toggle('hidden');
+            controlsToggle.classList.toggle('active');
+        });
+
+        // 位相的構造パネルのトグル
+        topologyToggle.addEventListener('click', () => {
+            topologyPanel.classList.toggle('hidden');
+            topologyToggle.classList.toggle('active');
+        });
+
+        // ウィンドウリサイズ時の対応
+        window.addEventListener('resize', () => {
+            // リサイズ時にメニュー状態を調整
+            const isMobile = window.innerWidth <= 768;
+            
+            if (!isMobile) {
+                // デスクトップでは両方表示
+                controlsPanel.classList.remove('hidden');
+                topologyPanel.classList.remove('hidden');
+                controlsToggle.classList.remove('active');
+                topologyToggle.classList.remove('active');
+            }
+        });
+
+        // 初期化
+        initMenuState();
 
         controls.t.addEventListener('input', (e) => {
             params.t = parseFloat(e.target.value);
