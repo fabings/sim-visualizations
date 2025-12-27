@@ -202,9 +202,9 @@
             <div class="control-group">
                 <label>
                     粒子密度
-                    <span class="value-display" id="particles-value">50000</span>
+                    <span class="value-display" id="particles-value">25000</span>
                 </label>
-                <input type="range" id="particle-count" min="5000" max="50000" step="1000" value="50000">
+                <input type="range" id="particle-count" min="5000" max="50000" step="1000" value="25000">
             </div>
 
             <div class="control-group">
@@ -448,7 +448,7 @@
         const timeLoc = gl.getUniformLocation(program, 'u_time');
 
         // 粒子システムの初期化
-        let particleCount = 50000; // 初期粒子密度
+        let particleCount = 25000; // 初期粒子密度
         let particles;
         let initialPosBuffer;
 
@@ -498,10 +498,26 @@
             lambda: 1.10,     // スケール λ
             iterations: 50,   // 反復回数
             speed: 0.020,     // 時間速度
-            animating: false  // アニメーション状態
+            animating: true  // アニメーション状態
         };
 
+        /**
+         * 時間管理変数
+         * 
+         * TIME_DELTA: 1フレームあたりの時間増分（固定値）
+         * time: グローバルな経過時間（色相計算などに使用）
+         * animationPhase: アニメーション専用の位相角度
+         * 
+         * 設計意図:
+         * - TIME_DELTAは時間の基本単位を定義
+         * - timeは全体の経過時間を表し、視覚効果に使用
+         * - animationPhaseはアニメーションの位相を独立管理し、
+         *   speedパラメータ変更時も連続性を保つ
+         * - 位相増分 = speed × TIME_DELTA により、旧実装と同じ速度スケール
+         */
+        const TIME_DELTA = 0.01;  // 1フレームあたりの時間増分
         let time = 0;
+        let animationPhase = 0;  // アニメーション専用の位相変数
 
         // UI Controls
         const controls = {
@@ -563,18 +579,61 @@
             document.getElementById('speed-value').textContent = params.speed.toFixed(3);
         });
 
+        /**
+         * アニメーション開始/停止ボタンのイベントハンドラ
+         * 
+         * アニメーション開始時の挙動:
+         * - 現在のt値から逆算してanimationPhaseを初期化
+         * - これにより、アニメーション開始時に位相が急変しない
+         */
         controls.animateBtn.addEventListener('click', () => {
             params.animating = !params.animating;
             controls.animateBtn.textContent = params.animating ? '停止' : '自動遷移アニメーション';
+            
+            // アニメーション開始時: 現在のt値から位相を逆算
+            if (params.animating) {
+                // params.t = 0.5 + 0.5 * sin(phase) の逆算
+                // sin(phase) = (params.t - 0.5) / 0.5 = 2 * params.t - 1
+                const currentSinValue = 2 * params.t - 1;
+                
+                // arcsin は [-π/2, π/2] の範囲を返すため、
+                // 現在の増減方向を考慮して位相を設定
+                animationPhase = Math.asin(Math.max(-1, Math.min(1, currentSinValue)));
+            }
         });
 
-        // Render loop
+        /**
+         * メインレンダリングループ
+         * 
+         * 時間管理の設計:
+         * 1. time: TIME_DELTAずつ単調増加（色相などの視覚効果用）
+         * 2. animationPhase: speed × TIME_DELTA で増分（位相遷移パラメータ用）
+         * 
+         * 位相増分の計算:
+         * - Δφ = speed × TIME_DELTA
+         * - これにより、旧実装（time × speed）と同じ速度スケールを維持
+         * - 例: speed=0.020, TIME_DELTA=0.01 → Δφ=0.0002 rad/frame
+         * 
+         * speedパラメータの意味:
+         * - 時間に対する速度係数（無次元）
+         * - 値が大きいほど速くsin関数が振動
+         * 
+         * この分離により、speedを変更しても位相の連続性が保たれる
+         */
         function render() {
-            time += 0.01;
+            time += TIME_DELTA;
             
-            // Auto-animation
+            // 自動アニメーション
             if (params.animating) {
-                params.t = 0.5 + 0.5 * Math.sin(time * params.speed);
+                // 位相を速度に応じて増分（連続的に変化）
+                // TIME_DELTAを掛けることで、旧実装と同じ速度スケールを維持
+                animationPhase += params.speed * TIME_DELTA;
+                
+                // 位相から位相遷移パラメータを計算
+                // sin関数により [0, 1] の範囲で滑らかに振動
+                params.t = 0.5 + 0.5 * Math.sin(animationPhase);
+                
+                // UI要素を更新
                 controls.t.value = params.t;
                 document.getElementById('t-value').textContent = params.t.toFixed(3);
             }

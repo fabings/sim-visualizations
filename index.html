@@ -514,6 +514,10 @@
         </p>
     </footer>
 
+    <!-- 作品メタデータの読み込み -->
+    <script src="./metadata.js"></script>
+
+    <!-- メインアプリケーション -->
     <script>
         /**
          * アプリケーション状態
@@ -523,64 +527,45 @@
             currentFilter: 'all',
             currentSort: 'date-desc',
             allTags: new Set(),
-            isLoading: true,
             metadata: null
         };
 
         /**
          * 初期化
          */
-        async function init() {
-            try {
-                // metadata.json から作品データを読み込み
-                await loadMetadata();
-                
-                // タグの収集
-                appState.works.forEach(work => {
-                    work.tags.forEach(tag => appState.allTags.add(tag));
-                });
-
-                // UI の初期化
-                updateStats();
-                renderFilterTags();
-                renderWorks();
-
-                // イベントリスナーの設定
-                document.getElementById('sort-select').addEventListener('change', handleSortChange);
-
-                console.log(`✅ ${appState.works.length} 作品を読み込みました`);
-
-            } catch (error) {
-                console.error('❌ メタデータの読み込みに失敗:', error);
+        function init() {
+            // metadata.js から読み込んだ METADATA を使用
+            if (typeof METADATA === 'undefined') {
+                console.error('❌ メタデータが読み込まれていません');
                 showErrorMessage('作品データの読み込みに失敗しました。');
+                return;
             }
-        }
 
-        /**
-         * メタデータの読み込み
-         */
-        async function loadMetadata() {
-            try {
-                const response = await fetch('./metadata.json');
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                
-                if (!data.works || !Array.isArray(data.works)) {
-                    throw new Error('不正なデータ形式: works配列が見つかりません');
-                }
-
-                appState.works = data.works;
-                appState.metadata = data.meta;
-                appState.isLoading = false;
-
-            } catch (error) {
-                appState.isLoading = false;
-                throw error;
+            // データの検証
+            if (!METADATA.works || !Array.isArray(METADATA.works)) {
+                console.error('❌ 不正なメタデータ形式');
+                showErrorMessage('作品データの形式が不正です。');
+                return;
             }
+
+            // データの読み込み
+            appState.works = METADATA.works;
+            appState.metadata = METADATA.meta;
+            
+            // タグの収集
+            appState.works.forEach(work => {
+                work.tags.forEach(tag => appState.allTags.add(tag));
+            });
+
+            // UI の初期化
+            updateStats();
+            renderFilterTags();
+            renderWorks();
+
+            // イベントリスナーの設定
+            document.getElementById('sort-select').addEventListener('change', handleSortChange);
+
+            console.log(`✅ ${appState.works.length} 作品を読み込みました`);
         }
 
         /**
@@ -593,7 +578,7 @@
                 <div class="empty-state-icon">⚠</div>
                 <p style="color: var(--accent-tertiary);">${message}</p>
                 <p style="font-size: 0.85rem; margin-top: 0.5rem;">
-                    metadata.json ファイルを確認してください。
+                    metadata.js ファイルを確認してください。
                 </p>
             `;
         }
