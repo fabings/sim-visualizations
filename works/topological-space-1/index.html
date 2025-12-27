@@ -322,7 +322,7 @@
     </div>
     
     <!-- コントロールパネル -->
-    <div id="controls">
+    <div id="controls" class="hidden">
         <h2>位相的パラメータ空間</h2>
         
         <div class="section">
@@ -417,7 +417,7 @@
     </div>
     
     <!-- 位相的構造情報パネル -->
-    <div id="topology-info">
+    <div id="topology-info" class="hidden">
         <strong>位相的構造:</strong><br>
         F_t(z) = e^(iπt) · [(1-σ(t))·sin(πz) + σ(t)·c·exp(z/λ)]<br><br>
         <strong>オイラー接続:</strong> e^(iθ) = cos(θ) + i·sin(θ)<br>
@@ -739,46 +739,66 @@
         const topologyPanel = document.getElementById('topology-info');
         const topologyToggle = document.getElementById('topology-toggle');
 
-        // 初期状態の設定（モバイルではデフォルトで閉じる）
+        /**
+         * 初期状態の設定
+         * HTMLで既にhiddenクラスが設定されているため、
+         * ボタンの状態のみ確認する
+         */
         function initMenuState() {
-            const isMobile = window.innerWidth <= 768;
-            
-            if (isMobile) {
-                controlsPanel.classList.add('hidden');
-                topologyPanel.classList.add('hidden');
-            } else {
-                controlsPanel.classList.remove('hidden');
-                topologyPanel.classList.remove('hidden');
-            }
+            // ボタンは通常のハンバーガーメニュー表示（activeなし）
+            // HTMLで既にパネルはhiddenクラス付きで定義されている
+            controlsToggle.classList.remove('active');
+            topologyToggle.classList.remove('active');
         }
 
-        // コントロールパネルのトグル
+        /**
+         * コントロールパネルのトグル
+         * 
+         * ロジック:
+         * - パネルが閉じている（hidden）→ 開く → ボタンを×マーク（active）
+         * - パネルが開いている → 閉じる → ボタンをハンバーガー（active解除）
+         */
         controlsToggle.addEventListener('click', () => {
-            controlsPanel.classList.toggle('hidden');
-            controlsToggle.classList.toggle('active');
-        });
-
-        // 位相的構造パネルのトグル
-        topologyToggle.addEventListener('click', () => {
-            topologyPanel.classList.toggle('hidden');
-            topologyToggle.classList.toggle('active');
-        });
-
-        // ウィンドウリサイズ時の対応
-        window.addEventListener('resize', () => {
-            // リサイズ時にメニュー状態を調整
-            const isMobile = window.innerWidth <= 768;
+            const isHidden = controlsPanel.classList.contains('hidden');
             
-            if (!isMobile) {
-                // デスクトップでは両方表示
+            if (isHidden) {
+                // 閉じている → 開く
                 controlsPanel.classList.remove('hidden');
-                topologyPanel.classList.remove('hidden');
+                controlsToggle.classList.add('active');
+            } else {
+                // 開いている → 閉じる
+                controlsPanel.classList.add('hidden');
                 controlsToggle.classList.remove('active');
+            }
+        });
+
+        /**
+         * 位相的構造パネルのトグル
+         */
+        topologyToggle.addEventListener('click', () => {
+            const isHidden = topologyPanel.classList.contains('hidden');
+            
+            if (isHidden) {
+                // 閉じている → 開く
+                topologyPanel.classList.remove('hidden');
+                topologyToggle.classList.add('active');
+            } else {
+                // 開いている → 閉じる
+                topologyPanel.classList.add('hidden');
                 topologyToggle.classList.remove('active');
             }
         });
 
-        // 初期化
+        /**
+         * ウィンドウリサイズ時の対応
+         * デスクトップに戻した時も閉じた状態を維持
+         */
+        window.addEventListener('resize', () => {
+            // リサイズ時は現在の状態を維持
+            // 特別な処理は不要
+        });
+
+        // 初期化（両方閉じた状態で開始）
         initMenuState();
 
         controls.t.addEventListener('input', (e) => {
