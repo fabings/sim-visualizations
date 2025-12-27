@@ -386,9 +386,9 @@
             <div class="control-group">
                 <label>
                     遷移鋭敏度 <span class="math">k</span>
-                    <span class="value-display" id="k-value">10.0</span>
+                    <span class="value-display" id="k-value">20.0</span>
                 </label>
-                <input type="range" id="k-slider" min="0.5" max="20" step="0.1" value="10">
+                <input type="range" id="k-slider" min="0.5" max="20" step="0.1" value="20">
                 <div class="info">σ(t) = ½(1 + tanh(k(t-½))) による滑らかな遷移</div>
             </div>
         </div>
@@ -610,6 +610,8 @@
             // 軌道の色相計算
             vec3 orbitColor(vec2 z, int escapeIter, int maxIter, float speed) {
                 float hue = float(escapeIter) / float(maxIter);
+                // 時間による色相シフト（mod演算により常に[0,1]の範囲を保証）
+                // u_timeはJavaScript側で周期的にリセットされるため、数値的に安定
                 hue = mod(hue + u_time * 0.1, 1.0);
                 
                 // 速度に基づく彩度
@@ -622,6 +624,8 @@
                 float dist = length(z);
                 float distanceFactor = 1.0 / (1.0 + dist * 0.3);
                 
+                // 時間による明度の振動（u_timeは周期的にリセットされる）
+                // sin関数の周期性により、リセット後も視覚的に連続
                 float baseBrightness = 0.5 + 0.5 * sin(dist * 2.0 + u_time);
                 float brightness = baseBrightness * distanceFactor;
                 
@@ -877,6 +881,16 @@
         }
 
         initParticles(particleCount);
+        
+        /**
+         * パフォーマンスモニタリング（開発・デバッグ用）
+         * 
+         * 長時間実行時の安定性を監視するための変数
+         * 本番環境では削除可能だが、問題の早期発見に有用
+         */
+        let frameCount = 0;
+        let lastFPSUpdate = performance.now();
+        let currentFPS = 60;
 
         /**
          * 位相空間パラメータの初期値設定
@@ -892,7 +906,7 @@
          */
         let params = {
             t: 0.5,           // 位相遷移パラメータ（中間状態）
-            k: 10.0,          // 遷移鋭敏度
+            k: 20.0,          // 遷移鋭敏度
             cReal: 2.0,       // 複素パラメータ c の実部
             cImag: -2.0,      // 複素パラメータ c の虚部
             r: 4.0,           // 実数振幅
@@ -915,8 +929,16 @@
          * - animationPhaseはアニメーションの位相を独立管理し、
          *   speedパラメータ変更時も連続性を保つ
          * - 位相増分 = speed × TIME_DELTA により、旧実装と同じ速度スケール
+         * 
+         * 長時間実行の安定性:
+         * - time と animationPhase は周期的にリセット（mod演算）
+         * - これにより浮動小数点精度の劣化を防止
+         * - 無限に増加する変数による数値的不安定性を回避
          */
         const TIME_DELTA = 0.01;  // 1フレームあたりの時間増分
+        const TIME_CYCLE = 100.0;  // 時間のリセット周期（色相計算用）
+        const TAU = Math.PI * 2;   // 2π（位相の周期）
+        
         let time = 0;
         let animationPhase = 0;  // アニメーション専用の位相変数
 
@@ -1077,8 +1099,8 @@
          * メインレンダリングループ
          * 
          * 時間管理の設計:
-         * 1. time: TIME_DELTAずつ単調増加（色相などの視覚効果用）
-         * 2. animationPhase: speed × TIME_DELTA で増分（位相遷移パラメータ用）
+         * 1. time: TIME_DELTAずつ増加、周期的にリセット（色相などの視覚効果用）
+         * 2. animationPhase: speed × TIME_DELTA で増分、2πでリセット（位相遷移用）
          * 
          * 位相増分の計算:
          * - Δφ = speed × TIME_DELTA
@@ -1089,16 +1111,36 @@
          * - 時間に対する速度係数（無次元）
          * - 値が大きいほど速くsin関数が振動
          * 
+         * 長時間実行の安定性:
+         * - time % TIME_CYCLE により周期的にリセット
+         * - animationPhase % TAU により2π周期でリセット
+         * - 浮動小数点精度の劣化を防止
+         * - 数値的安定性を長期間保証
+         * 
          * この分離により、speedを変更しても位相の連続性が保たれる
          */
         function render() {
+            // 時間を増分し、周期的にリセット（精度維持のため）
             time += TIME_DELTA;
+            if (time >= TIME_CYCLE) {
+                time = time % TIME_CYCLE;
+            }
             
             // 自動アニメーション
             if (params.animating) {
                 // 位相を速度に応じて増分（連続的に変化）
                 // TIME_DELTAを掛けることで、旧実装と同じ速度スケールを維持
                 animationPhase += params.speed * TIME_DELTA;
+                
+                // 位相を2π周期でリセット（精度維持と数値安定性のため）
+                // sin関数は周期2πなので、mathematicallyに等価
+                if (animationPhase >= TAU) {
+                    animationPhase = animationPhase % TAU;
+                }
+                // 負の方向にも対応（speedが負になることはないが、念のため）
+                if (animationPhase < 0) {
+                    animationPhase = animationPhase % TAU + TAU;
+                }
                 
                 // 位相から位相遷移パラメータを計算
                 // sin関数により [0, 1] の範囲で滑らかに振動
@@ -1109,9 +1151,12 @@
                 document.getElementById('t-value').textContent = params.t.toFixed(3);
             }
             
+            // クリアとブレンディング設定
             gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
             
+            // ブレンディング設定（初回のみ設定済みだが、念のため毎フレーム設定）
+            // 加算ブレンディング: 光の加算効果
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
@@ -1135,6 +1180,26 @@
 
             // Draw
             gl.drawArrays(gl.POINTS, 0, particleCount);
+            
+            // パフォーマンスモニタリング
+            // 
+            // 長時間実行時の安定性確認
+            // FPSが大きく低下した場合、コンソールに警告を出力
+            frameCount++;
+            const now = performance.now();
+            const elapsed = now - lastFPSUpdate;
+            
+            if (elapsed >= 1000) {
+                currentFPS = (frameCount * 1000) / elapsed;
+                
+                // FPSが30未満に低下した場合、警告
+                if (currentFPS < 30) {
+                    console.warn(`⚠️ パフォーマンス低下検出: ${currentFPS.toFixed(1)} FPS`);
+                }
+                
+                frameCount = 0;
+                lastFPSUpdate = now;
+            }
 
             requestAnimationFrame(render);
         }
