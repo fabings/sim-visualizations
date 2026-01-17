@@ -1,0 +1,463 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>v21 phase-sheet ridges</title>
+  <style>
+    :root{
+      --bg:#050812; --panel:rgba(10,14,28,0.42); --border:rgba(180,200,255,0.16);
+      --text:#e9eeff; --muted:#b9c2ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:var(--sans);color:var(--text);
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+    .menu-toggle{
+      position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+      border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+    }
+    .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+    .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+    .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+    .menu-toggle:active{transform:scale(0.95);}
+    #hint-toggle{top:12px;left:12px;}
+    #hud-toggle{top:12px;right:12px;}
+    .hud{
+      position:fixed;right:12px;top:72px;width:min(980px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+      white-space:pre;pointer-events:none;overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+    }
+    .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;visibility:hidden;}
+    .hint{
+      position:fixed;left:12px;top:72px;width:min(820px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-size:11px;line-height:1.55;color:var(--muted);overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+    }
+    .hint.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+    .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--muted);}
+    @media (max-width: 768px) {
+      .menu-toggle{width:45px;height:45px;}
+      .hint,.hud{max-width:calc(100vw - 84px);}
+    }
+    @media (max-width: 480px) {
+      .menu-toggle{width:40px;height:40px;}
+      .menu-toggle span{width:24px;}
+      #hint-toggle,#hud-toggle{top:10px;}
+      #hint-toggle{left:10px;}
+      #hud-toggle{right:10px;}
+      .hint{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+      .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+      .hint,.hud{font-size:10px;}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="hint-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="hint hidden" id="hint">
+  <b>v21</b> — 位相層境界の隆起 + 遷移瞬間(dΩ/dt)強調 + 加算合成（体積感）<br>
+  <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+  <span class="kbd">space</span> pause, <span class="kbd">H</span> HUD,
+  <span class="kbd">[ ]</span> speed, <span class="kbd">0</span> reset
+  <br><br>
+  ・色境界を“隆起”で見せる：k=floor(Φ/2π) の境界（phase-sheet）を ridge に加える<br>
+  ・遷移強調：dΩ/dt を proxy に ridge/彩度/α を短時間ブースト（導出された演出）<br>
+  ・加算合成：fogなしでも体積感（6スライス×additive）
+</div>
+
+<div class="hud hidden" id="hud"></div>
+
+<script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+<script>
+(() => {
+  // ハンバーガーメニューの制御
+  const hintPanel = document.getElementById('hint');
+  const hintToggle = document.getElementById('hint-toggle');
+  const hudPanel = document.getElementById('hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  hintToggle.addEventListener('click', () => {
+    const isHidden = hintPanel.classList.contains('hidden');
+    if (isHidden) {
+      hintPanel.classList.remove('hidden');
+      hintToggle.classList.add('active');
+    } else {
+      hintPanel.classList.add('hidden');
+      hintToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 6000);
+
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(()=>{ resize(); requestAnimationFrame(resize); });
+
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.10);
+  key.position.set(18, 28, 22);
+  scene.add(key);
+
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  let paused=false;
+  const cam = {drag:false, px:0, py:0, theta:1.15, phi:1.0, radius:18.0};
+  function updateCam(){
+    cam.phi = clamp(cam.phi, 0.18, Math.PI-0.18);
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY;
+    canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = clamp(cam.radius*s, 6, 140);
+  }, {passive:false});
+
+  // monotone schedule
+  const st = {
+    t:0,
+    speed:1.0,
+    S:0,
+    Omega:0,
+    dOmega:0,
+    rph:0,
+    rh:0,
+    eta:0,
+    rho:1.0,
+    ell:4,
+    m:2
+  };
+  function sigmoid(x){ return 1/(1+Math.exp(-x)); }
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+
+  function OmegaFromS(S){ return 10.0*S; }
+  function r_ph(Omega){ return 1.35 + 1.9*Math.tanh(0.16*Omega); }
+  function r_h(Omega){ return 0.55 + 1.25*Math.tanh(0.14*Omega); }
+
+  function updateDynamics(dt){
+    const t0=10.0, w=2.2;
+    const S = sigmoid((st.t - t0)/w);
+    const dS = (1/w)*S*(1-S);
+
+    st.S = S;
+    const prevOmega = st.Omega;
+    st.Omega = OmegaFromS(S);
+    st.dOmega = (st.Omega - prevOmega)/Math.max(1e-6,dt);
+
+    st.rh = r_h(st.Omega);
+    st.rph = r_ph(st.Omega);
+
+    st.eta = 3.1 * dS + 0.55*S;
+    st.rho = 0.8 + 0.7*Math.tanh(0.12*st.Omega);
+
+    st.ell = 3 + Math.floor(3*smoothstep(S));
+    st.m = Math.min(st.ell, 2);
+  }
+
+  // GPU slices
+  const planeGeo = new THREE.PlaneGeometry(11.2, 11.2, 150, 150);
+
+  const vertexShader = `
+    uniform float uTime;
+    uniform float uPlaneKind;
+    uniform float uPlaneC0;
+    uniform float uOmega;
+    uniform float uDOmega;   // transition proxy
+    uniform float uEta;
+    uniform float uRph;
+    uniform float uRh;
+    uniform float uRho;
+    uniform float uL;
+    uniform float uM;
+    uniform float uBaseAlpha;
+    uniform float uJitter;
+    uniform float uPhaseOff;
+
+    varying vec3 vColor;
+    varying float vR;
+    varying float vRh;
+    varying float vAlpha;
+
+    vec3 hsv2rgb(vec3 c){
+      vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+      vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+      return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+
+    void main(){
+      vec2 uv = position.xy;
+
+      vec3 p;
+      if(uPlaneKind < 0.5) p = vec3(uv.x, uv.y, uPlaneC0);
+      else if(uPlaneKind < 1.5) p = vec3(uv.x, uPlaneC0, uv.y);
+      else p = vec3(uPlaneC0, uv.x, uv.y);
+
+      float j = (hash(uv*37.0 + uPlaneC0*11.0) - 0.5) * uJitter;
+      if(uPlaneKind < 0.5) p.z += j;
+      else if(uPlaneKind < 1.5) p.y += j;
+      else p.x += j;
+
+      // rotate coordinates (rho)
+      vec3 axis = normalize(vec3(sin(0.12*uTime), cos(0.09*uTime+1.1), sin(0.11*uTime-0.7)));
+      float ang = uRho*0.35*uTime;
+      vec3 v = p*cos(ang) + cross(axis,p)*sin(ang) + axis*dot(axis,p)*(1.0-cos(ang));
+      float r = length(v)+1e-4;
+      vR = r;
+      vRh = uRh;
+
+      float theta = acos(clamp(v.y/r, -1.0, 1.0));
+      float phi = atan(v.z, v.x);
+
+      // transition boost from dOmega/dt (peak around formation)
+      float T = tanh(0.12*abs(uDOmega)); // [0,1)
+
+      float delta = 0.10 + 0.10*(1.0/(1.0+0.3*uOmega));
+      float H = smoothstep(uRh, uRh+delta, r);
+      float ridgeH = 1.0 - H;
+
+      float Aabs = exp(-0.35*uOmega/(r + 0.12));
+      float sigma = 0.14 + 0.10*(1.0/(1.0+0.25*uOmega));
+      float dr = (r - uRph);
+      float ringG = exp(-(dr*dr)/(2.0*sigma*sigma));
+      float Aring = 1.0 + (1.35*uEta) * ringG;
+      float A = clamp(Aabs * Aring, 0.0, 3.4);
+
+      float dAabs = Aabs * (0.35*uOmega)/((r+0.12)*(r+0.12));
+      float dAring = (1.35*uEta) * ringG * abs(dr)/(sigma*sigma + 1e-6);
+      float ridgeA = tanh(1.05*(dAabs + dAring));
+
+      float k = 2.1;
+      float w = 1.85;
+      float eps = 0.04 + 0.06*(1.0/(1.0+0.6*uOmega));
+      float lam = 1.25 + 2.8*tanh(0.10*uOmega) * (0.30 + 0.70*uEta);
+      float caustic = lam*log(dr*dr + eps*eps);
+      float Phi = k*r - w*uTime + caustic + uPhaseOff;
+
+      // phase-sheet index and boundary ridge
+      float sheet = floor(Phi/6.2831853);
+      // boundary is where fractional part close to 0
+      float frac = abs(fract(Phi/6.2831853) - 0.5); // 0 at 0.5, 0.5 at 0 or 1
+      float boundary = 1.0 - smoothstep(0.46, 0.50, frac); // sharp near 0/1 boundary
+      float ridgeSheet = boundary;
+
+      float dPhi = lam * abs(2.0*dr/(dr*dr + eps*eps));
+      float ridgePhi = tanh(0.20*dPhi);
+
+      float Y = cos(uL*theta + uM*phi);
+      float psi = A * Y * cos(Phi);
+
+      float sink = -0.34*tanh(0.10*uOmega/(r+0.12));
+      float edge = -0.55*ridgeH;
+
+      // boost ridges during transition
+      float boost = 1.0 + 0.9*T;
+
+      float disp = boost*(0.55*ridgeA + 1.35*ridgePhi + 0.95*ridgeSheet) + 0.38*psi + sink + edge;
+
+      vec3 outP = p;
+      if(uPlaneKind < 0.5) outP.z += disp;
+      else if(uPlaneKind < 1.5) outP.y += disp;
+      else outP.x += disp;
+
+      // alpha: base + ring + horizon + sheet boundary
+      float ridge = clamp(0.20 + 0.55*ridgeA + 0.85*ridgePhi + 0.85*ridgeH + 0.65*ringG + 0.90*ridgeSheet, 0.0, 1.0);
+      float aBase = uBaseAlpha * (0.26 + 0.74*ridge) * (0.60 + 0.40*Aabs);
+      // transition adds a bit to visibility so the moment is obvious
+      vAlpha = clamp(aBase*(1.0 + 0.35*T), 0.03, 0.95);
+
+      // color: hue from sheet index + phase (discrete bands)
+      float hue = fract(0.12*sheet + Phi/6.2831853);
+      float sat = clamp(0.10 + 0.45*ridgeA + 0.70*ridgePhi + 0.60*ridgeH + 0.35*ringG + 0.75*ridgeSheet + 0.15*T, 0.0, 1.0);
+      float val = clamp(0.12 + 0.88*min(1.0, A/1.9) * (0.35 + 0.65*min(1.0, abs(Y)*4.0)) * (0.25 + 0.75*H), 0.0, 1.0);
+      vColor = hsv2rgb(vec3(hue, sat, val));
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(outP, 1.0);
+    }
+  `;
+
+  const fragmentShader = `
+    varying vec3 vColor;
+    varying float vR;
+    varying float vRh;
+    varying float vAlpha;
+    void main(){
+      if(vR < vRh){
+        discard;
+      }
+      gl_FragColor = vec4(vColor, vAlpha);
+    }
+  `;
+
+  const baseMat = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending, // key for volumetric feel without fog
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: {value: 0},
+      uPlaneKind: {value: 0},
+      uPlaneC0: {value: 0},
+      uOmega: {value: 0},
+      uDOmega: {value: 0},
+      uEta: {value: 0},
+      uRph: {value: 0},
+      uRh: {value: 0},
+      uRho: {value: 0},
+      uL: {value: 4},
+      uM: {value: 2},
+      uBaseAlpha: {value: 0.22},
+      uJitter: {value: 0.06},
+      uPhaseOff: {value: 0}
+    }
+  });
+
+  const d=0.95;
+  const planes=[];
+  function addPlane(kind, c0, baseAlpha, phaseOff){
+    const m = baseMat.clone();
+    m.uniforms = THREE.UniformsUtils.clone(baseMat.uniforms);
+    m.uniforms.uPlaneKind.value = kind;
+    m.uniforms.uPlaneC0.value = c0;
+    m.uniforms.uBaseAlpha.value = baseAlpha;
+    m.uniforms.uPhaseOff.value = phaseOff;
+    const mesh = new THREE.Mesh(planeGeo, m);
+    scene.add(mesh);
+    planes.push(mesh);
+  }
+
+  // phase offsets differ per slice -> integrated 3D feel
+  addPlane(0, -d, 0.20, 0.0);
+  addPlane(0,  d, 0.20, 0.7);
+  addPlane(1, -d, 0.18, 1.2);
+  addPlane(1,  d, 0.18, 1.9);
+  addPlane(2, -d, 0.16, 2.6);
+  addPlane(2,  d, 0.16, 3.3);
+
+  // HUD
+  const hud=document.getElementById('hud');
+  const hint=document.getElementById('hint');
+  function hudText(){
+    return [
+      "v21 — phase-sheet ridges + transition boost + additive blending (no fog)",
+      `t=${st.t.toFixed(2)} speed=${st.speed.toFixed(2)} paused=${paused}`,
+      `S=${st.S.toFixed(3)} Ω=${st.Omega.toFixed(4)} dΩ/dt=${st.dOmega.toFixed(3)}`,
+      `r_h=${st.rh.toFixed(3)} r_ph=${st.rph.toFixed(3)} η=${st.eta.toFixed(3)} ρ=${st.rho.toFixed(3)}`,
+      "Expect now:",
+      "- Discrete band ridges: phase-sheet boundaries rise (not just color).",
+      "- Transition moment becomes obvious via dΩ/dt boost.",
+      "- Slices unify as volumetric field via additive blending + phase offsets."
+    ].join("\n");
+  }
+
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space') paused=!paused;
+    if(e.key==='h'||e.key==='H'){
+      const isVisible = !hudPanel.classList.contains('hidden');
+      if(isVisible){
+        hud.classList.add('hidden');
+        hint.classList.add('hidden');
+        hudToggle.classList.remove('active');
+        hintToggle.classList.remove('active');
+      } else {
+        hud.classList.remove('hidden');
+        hint.classList.remove('hidden');
+        hudToggle.classList.add('active');
+        hintToggle.classList.add('active');
+      }
+    }
+    if(e.key==='[') st.speed = clamp(st.speed*0.8, 0.1, 6.0);
+    if(e.key===']') st.speed = clamp(st.speed*1.25,0.1,6.0);
+    if(e.key==='0'){ st.t=0; }
+  });
+
+  // loop
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+
+    updateCam();
+    if(!paused) st.t += dt*st.speed;
+
+    updateDynamics(dt);
+
+    for(const mesh of planes){
+      const u = mesh.material.uniforms;
+      u.uTime.value = st.t;
+      u.uOmega.value = st.Omega;
+      u.uDOmega.value = st.dOmega;
+      u.uEta.value = st.eta;
+      u.uRph.value = st.rph;
+      u.uRh.value = st.rh;
+      u.uRho.value = st.rho;
+      u.uL.value = st.ell;
+      u.uM.value = st.m;
+    }
+
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script></body>
+</html>

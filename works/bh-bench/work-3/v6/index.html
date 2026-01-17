@@ -1,0 +1,447 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>v21 additive volumetric slices</title>
+  <style>
+    :root{
+      --bg:#050812; --panel:rgba(10,14,28,0.36); --border:rgba(180,200,255,0.14);
+      --text:#e9eeff; --muted:#b9c2ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:var(--sans);color:var(--text);
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+    
+    /* ハンバーガーメニューボタン */
+    .menu-toggle{
+      position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+      border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+    }
+    .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+    .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+    .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+    .menu-toggle:active{transform:scale(0.95);}
+    #hint-toggle{top:12px;left:12px;}
+    #hud-toggle{top:12px;right:12px;}
+    .hud{
+      position:fixed;right:12px;top:72px;width:min(980px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+      white-space:pre;pointer-events:none;overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+    }
+    .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;visibility:hidden;}
+    .hint{
+      position:fixed;left:12px;top:72px;width:min(760px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-size:11px;line-height:1.55;color:var(--muted);overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+    }
+    .hint.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+    .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--muted);}
+    @media (max-width: 768px) {
+      .menu-toggle{width:45px;height:45px;}
+      .hint,.hud{max-width:calc(100vw - 84px);}
+    }
+    @media (max-width: 480px) {
+      .menu-toggle{width:40px;height:40px;}
+      .menu-toggle span{width:24px;}
+      #hint-toggle,#hud-toggle{top:10px;}
+      #hint-toggle{left:10px;}
+      #hud-toggle{right:10px;}
+      .hint{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+      .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+      .hint,.hud{font-size:10px;}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="hint-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="hint hidden" id="hint">
+  <b>v21</b> — Additive blendingで体積感（fogなし） / 信号分離 / hole(discard)<br>
+  <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+  <span class="kbd">space</span> pause, <span class="kbd">H</span> HUD,
+  <span class="kbd">[ ]</span> speed, <span class="kbd">0</span> reset
+  <br><br>
+  ・位相境界: |∇Φ| が隆起（等高線が結果として立つ）<br>
+  ・ring: ringG を発光（加算）で強調（板に見えない）<br>
+  ・horizon edge: ridgeH を発光で強調（穴の縁が見える）<br>
+  ・ηピーク（遷移瞬間）で ring/edge が最大に光る
+</div>
+
+<div class="hud hidden" id="hud"></div>
+
+<script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+<script>
+(() => {
+  // ハンバーガーメニューの制御
+  const hintPanel = document.getElementById('hint');
+  const hintToggle = document.getElementById('hint-toggle');
+  const hudPanel = document.getElementById('hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  hintToggle.addEventListener('click', () => {
+    const isHidden = hintPanel.classList.contains('hidden');
+    if (isHidden) {
+      hintPanel.classList.remove('hidden');
+      hintToggle.classList.add('active');
+    } else {
+      hintPanel.classList.add('hidden');
+      hintToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 6000);
+
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(()=>{ resize(); requestAnimationFrame(resize); });
+
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.10);
+  key.position.set(18, 28, 22);
+  scene.add(key);
+
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  let paused=false;
+  const cam = {drag:false, px:0, py:0, theta:1.15, phi:1.0, radius:18.0};
+  function updateCam(){
+    cam.phi = clamp(cam.phi, 0.18, Math.PI-0.18);
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY;
+    canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = clamp(cam.radius*s, 6, 140);
+  }, {passive:false});
+
+  const st = { t:0, speed:1.0, S:0, Omega:0, rph:0, rh:0, eta:0, rho:0, ell:4, m:2, dOmega:0 };
+
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+  function sigmoid(x){ return 1/(1+Math.exp(-x)); }
+
+  function OmegaFromS(S){ return 10.0*S; }
+  function r_ph(Omega){ return 1.35 + 1.9*Math.tanh(0.16*Omega); }
+  function r_h(Omega){ return 0.55 + 1.25*Math.tanh(0.14*Omega); }
+
+  function updateDynamics(dt){
+    const t0=10.0, w=2.2;
+    const S = sigmoid((st.t - t0)/w);
+    st.S=S;
+
+    const Omega = OmegaFromS(S);
+    st.dOmega = (Omega - st.Omega)/Math.max(1e-6,dt);
+    st.Omega = Omega;
+
+    st.rh = r_h(st.Omega);
+    st.rph = r_ph(st.Omega);
+
+    const dS = (1/w)*S*(1-S);
+    st.eta = 3.2*dS + 0.55*S; // transition flash + post persistence
+
+    st.rho = 0.8 + 0.7*Math.tanh(0.12*st.Omega);
+
+    st.ell = 3 + Math.floor(3*smoothstep(S));
+    st.m = Math.min(st.ell, 2);
+  }
+
+  // shader: additive blending + signal separation
+  const planeGeo = new THREE.PlaneGeometry(11.2, 11.2, 150, 150);
+
+  const vertexShader = `
+    uniform float uTime;
+    uniform float uPlaneKind;
+    uniform float uPlaneC0;
+    uniform float uOmega;
+    uniform float uEta;
+    uniform float uRph;
+    uniform float uRh;
+    uniform float uRho;
+    uniform float uL;
+    uniform float uM;
+    uniform float uBaseAlpha;
+    uniform float uJitter;
+
+    varying vec3 vColor;
+    varying float vR;
+    varying float vRh;
+    varying float vAlpha;
+
+    vec3 hsv2rgb(vec3 c){
+      vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+      vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+      return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+    float hash(vec2 p){
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    void main(){
+      vec2 uv = position.xy;
+
+      vec3 p;
+      if(uPlaneKind < 0.5) p = vec3(uv.x, uv.y, uPlaneC0);
+      else if(uPlaneKind < 1.5) p = vec3(uv.x, uPlaneC0, uv.y);
+      else p = vec3(uPlaneC0, uv.x, uv.y);
+
+      // micro-jitter to reduce "flat plate" impression
+      float j = (hash(uv*37.0 + uPlaneC0*11.0) - 0.5) * uJitter;
+      if(uPlaneKind < 0.5) p.z += j;
+      else if(uPlaneKind < 1.5) p.y += j;
+      else p.x += j;
+
+      vec3 axis = normalize(vec3(sin(0.12*uTime), cos(0.09*uTime+1.1), sin(0.11*uTime-0.7)));
+      float ang = uRho*0.35*uTime;
+      vec3 v = p*cos(ang) + cross(axis,p)*sin(ang) + axis*dot(axis,p)*(1.0-cos(ang));
+      float r = length(v)+1e-4;
+      vR = r;
+      vRh = uRh;
+
+      float theta = acos(clamp(v.y/r, -1.0, 1.0));
+      float phi = atan(v.z, v.x);
+
+      // horizon boundary layer
+      float delta = 0.10 + 0.10*(1.0/(1.0+0.3*uOmega));
+      float H = smoothstep(uRh, uRh+delta, r);
+      float ridgeH = 1.0 - H;
+
+      // ring envelope
+      float Aabs = exp(-0.35*uOmega/(r + 0.12));
+      float sigma = 0.14 + 0.10*(1.0/(1.0+0.25*uOmega));
+      float dr = (r - uRph);
+      float ringG = exp(-(dr*dr)/(2.0*sigma*sigma));
+
+      // IMPORTANT: separate ring "glow" from displacement
+      float A = Aabs * (1.0 + (1.15*uEta)*ringG);
+      A = clamp(A, 0.0, 3.2);
+
+      // phase with caustic
+      float k = 2.1;
+      float w = 1.85;
+      float eps = 0.04 + 0.06*(1.0/(1.0+0.6*uOmega));
+      float lam = 1.30 + 2.8*tanh(0.10*uOmega) * (0.30 + 0.70*uEta);
+      float caustic = lam*log(dr*dr + eps*eps);
+      float Phi = k*r - w*uTime + caustic;
+
+      // ridge proxies
+      float dPhi = lam * abs(2.0*dr/(dr*dr + eps*eps));
+      float ridgePhi = tanh(0.18*dPhi); // iso-phase steepness
+      float ridgeA = tanh(0.65*(Aabs*(0.35*uOmega)/((r+0.12)*(r+0.12)) + (1.15*uEta)*ringG*abs(dr)/(sigma*sigma + 1e-6)));
+
+      float Y = cos(uL*theta + uM*phi);
+
+      // displacement: prioritize ridgePhi (phase contours) and horizon edge, keep wave subtle
+      float wave = 0.22 * A * Y * cos(Phi);
+      float sink = -0.30*tanh(0.10*uOmega/(r+0.12));
+      float edge = -0.62*ridgeH;
+      float disp = 0.35*ridgeA + 1.35*ridgePhi + wave + sink + edge;
+
+      vec3 outP = p;
+      if(uPlaneKind < 0.5) outP.z += disp;
+      else if(uPlaneKind < 1.5) outP.y += disp;
+      else outP.x += disp;
+
+      // color: separate channels
+      // hue from Phi
+      float hue = fract(Phi/6.2831853);
+
+      // sat from ridgePhi + horizon edge
+      float sat = clamp(0.10 + 0.55*ridgePhi + 0.55*ridgeH + 0.20*ridgeA, 0.0, 1.0);
+
+      // value from Aabs and ring glow and H (outside)
+      float glow = (0.45 + 0.75*uEta) * ringG + 0.65*ridgeH;
+      float val = clamp(0.10 + 0.65*Aabs + 0.55*glow, 0.0, 1.0) * (0.25 + 0.75*H);
+
+      vColor = hsv2rgb(vec3(hue, sat, val));
+
+      // alpha: additive volumetric composition:
+      // baseline small + highlight ring/horizon edges strongly.
+      float a = uBaseAlpha*(0.18 + 0.55*ridgePhi + 0.65*ringG + 0.75*ridgeH);
+      // taper by Aabs (so far outside not too dense)
+      a *= (0.35 + 0.65*Aabs);
+      vAlpha = clamp(a, 0.0, 1.0);
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(outP, 1.0);
+    }
+  `;
+
+  const fragmentShader = `
+    varying vec3 vColor;
+    varying float vR;
+    varying float vRh;
+    varying float vAlpha;
+    void main(){
+      if(vR < vRh){
+        discard;
+      }
+      gl_FragColor = vec4(vColor, vAlpha);
+    }
+  `;
+
+  function makeMat(){
+    const m = new THREE.ShaderMaterial({
+      vertexShader, fragmentShader,
+      transparent:true,
+      depthWrite:false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      uniforms:{
+        uTime:{value:0},
+        uPlaneKind:{value:0},
+        uPlaneC0:{value:0},
+        uOmega:{value:0},
+        uEta:{value:0},
+        uRph:{value:0},
+        uRh:{value:0},
+        uRho:{value:0},
+        uL:{value:4},
+        uM:{value:2},
+        uBaseAlpha:{value:0.14},
+        uJitter:{value:0.06}
+      }
+    });
+    return m;
+  }
+
+  const d=0.95;
+  const planes=[];
+  function addPlane(kind,c0,baseAlpha){
+    const mat = makeMat();
+    mat.uniforms.uPlaneKind.value = kind;
+    mat.uniforms.uPlaneC0.value = c0;
+    mat.uniforms.uBaseAlpha.value = baseAlpha;
+    const mesh = new THREE.Mesh(planeGeo, mat);
+    scene.add(mesh);
+    planes.push(mesh);
+  }
+
+  // slightly reduced alpha per plane because additive blending accumulates
+  addPlane(0,-d,0.11); addPlane(0,d,0.11);
+  addPlane(1,-d,0.10); addPlane(1,d,0.10);
+  addPlane(2,-d,0.09); addPlane(2,d,0.09);
+
+  // HUD
+  const hud=document.getElementById('hud');
+  const hint=document.getElementById('hint');
+  function hudText(){
+    return [
+      "v21 — additive volumetric slices + signal separation + hole(discard)",
+      `t=${st.t.toFixed(2)} speed=${st.speed.toFixed(2)} paused=${paused}`,
+      `S=${st.S.toFixed(3)} Ω=${st.Omega.toFixed(4)} dΩ/dt=${st.dOmega.toFixed(3)} η=${st.eta.toFixed(3)}`,
+      `r_h=${st.rh.toFixed(3)} r_ph=${st.rph.toFixed(3)} ρ=${st.rho.toFixed(3)} (ℓ,m)=(${st.ell},${st.m})`,
+      "",
+      "What should be clearer now:",
+      "- Slices no longer look like opaque plates (additive blending).",
+      "- Phase contours rise as ridges (ridgePhi dominates geometry).",
+      "- Ring and horizon edge glow are separated and brighter.",
+      "- Transition flash is encoded by η (strong near formation)."
+    ].join("\n");
+  }
+
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space') paused=!paused;
+    if(e.key==='h'||e.key==='H'){
+      const isVisible = !hudPanel.classList.contains('hidden');
+      if(isVisible){
+        hud.classList.add('hidden');
+        hint.classList.add('hidden');
+        hudToggle.classList.remove('active');
+        hintToggle.classList.remove('active');
+      } else {
+        hud.classList.remove('hidden');
+        hint.classList.remove('hidden');
+        hudToggle.classList.add('active');
+        hintToggle.classList.add('active');
+      }
+    }
+    if(e.key==='[') st.speed = clamp(st.speed*0.8, 0.1, 6.0);
+    if(e.key===']') st.speed = clamp(st.speed*1.25,0.1,6.0);
+    if(e.key==='0'){ st.t=0; }
+  });
+
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    updateCam();
+    if(!paused) st.t += dt*st.speed;
+
+    updateDynamics(dt);
+
+    for(const mesh of planes){
+      const u = mesh.material.uniforms;
+      u.uTime.value = st.t;
+      u.uOmega.value = st.Omega;
+      u.uEta.value = st.eta;
+      u.uRph.value = st.rph;
+      u.uRh.value = st.rh;
+      u.uRho.value = st.rho;
+      u.uL.value = st.ell;
+      u.uM.value = st.m;
+    }
+
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script></body>
+</html>

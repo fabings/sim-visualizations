@@ -84,6 +84,26 @@
       "date": "2025-01-17",
       "thumbnail": null,
       "icon": "◌"
+    },
+    {
+      "id": "additive-volumetric-slices",
+      "title": "Additive Volumetric Slices: Signal Separation",
+      "description": "加算ブレンディングにより、6枚のスライスを体積的に合成。リング発光、境界層発光、位相等高線を信号分離し、遷移瞬間（dΩ/dt）での光度ピークを実現します。",
+      "path": "./works/bh-bench/work-3/v6/index.html",
+      "tags": ["Volume Rendering", "Additive Blending", "GPU Computing", "GLSL Shader", "3D Visualization", "Three.js", "Signal Processing"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "◍"
+    },
+    {
+      "id": "phase-sheet-ridges",
+      "title": "Phase-Sheet Ridges: Transition Dynamics",
+      "description": "位相の整数境界（k=⌊Φ/2π⌋）を隆起として可視化。dΩ/dtによる遷移瞬間の強調、加算合成による体積感、位相シートの自然な創発を統合的に表現します。",
+      "path": "./works/bh-bench/work-3/v7/index.html",
+      "tags": ["Phase Transition", "Topological Defects", "GPU Computing", "GLSL Shader", "3D Visualization", "Three.js", "Dynamical Systems"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "◐"
     }
   ]
 }
