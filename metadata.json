@@ -34,6 +34,26 @@
       "date": "2025-01-17",
       "thumbnail": null,
       "icon": "⊗"
+    },
+    {
+      "id": "wavefield-caustic-ring",
+      "title": "Wavefield Caustic Ring: Triple-Slice Visualization",
+      "description": "波動場Ψの勾配から生成されるコースティックリング（集束環）を、XY/XZ/YZ の3つの断面で可視化。渦、位相波紋、内部の不可視領域が、場の形状として自然に出現します。",
+      "path": "./works/bh-bench/work-3/index.html",
+      "tags": ["Wave Physics", "Caustics", "Field Theory", "3D Visualization", "Three.js", "Gradient Analysis"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "◎"
+    },
+    {
+      "id": "spherical-harmonics-defect",
+      "title": "Spherical Harmonics: Y_ℓ^m Defect Visualization",
+      "description": "球面調和関数 Y_ℓ^m の節構造を3D可視化。ℓとmのパラメータにより変化する節面が、勾配による隆起として出現。回転・コースティック・内部不可視性を統合的に表現します。",
+      "path": "./works/bh-bench/work-3/v2/index.html",
+      "tags": ["Spherical Harmonics", "Quantum Mechanics", "Mathematical Physics", "3D Visualization", "Three.js", "Gradient Analysis"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "Y"
     }
   ]
 }

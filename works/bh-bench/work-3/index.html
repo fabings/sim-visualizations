@@ -1,0 +1,477 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>v14 Wavefield triple-slices + caustic ring (no fog, no point cloud)</title>
+  <style>
+    :root{
+      --bg:#050812; --panel:rgba(10,14,28,0.55); --border:rgba(180,200,255,0.18);
+      --text:#e9eeff; --muted:#b9c2ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:var(--sans);color:var(--text);
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+    
+    /* ハンバーガーメニューボタン */
+    .menu-toggle{
+      position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+      border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+    }
+    .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+    .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+    .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+    .menu-toggle:active{transform:scale(0.95);}
+    
+    #hint-toggle{top:12px;left:12px;}
+    #hud-toggle{top:12px;right:12px;}
+    
+    .hud{
+      position:fixed;right:12px;top:72px;width:min(760px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+      white-space:pre;pointer-events:none;overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+    }
+    .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;visibility:hidden;}
+    
+    .hint{
+      position:fixed;left:12px;top:72px;width:min(600px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-size:11px;line-height:1.55;color:var(--muted);overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+    }
+    .hint.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+    
+    .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--muted);}
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .menu-toggle{width:45px;height:45px;}
+      .hint,.hud{max-width:calc(100vw - 84px);}
+    }
+    
+    @media (max-width: 480px) {
+      .menu-toggle{width:40px;height:40px;}
+      .menu-toggle span{width:24px;}
+      #hint-toggle,#hud-toggle{top:10px;}
+      #hint-toggle{left:10px;}
+      #hud-toggle{right:10px;}
+      .hint{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+      .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+      .hint,.hud{font-size:10px;}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="hint-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="hint hidden" id="hint">
+  <b>v14: triple-slices (XY/XZ/YZ) + caustic ring emerges from Φ</b><br>
+  <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+  <span class="kbd">space</span> pause,
+  <span class="kbd">H</span> HUD,
+  <span class="kbd">A/Z</span> α,
+  <span class="kbd">R/F</span> r,
+  <span class="kbd">Q/W</span> ρ,
+  <span class="kbd">N/M</span> winding n,
+  <span class="kbd">[ ]</span> speed
+  <br><br>
+  <b>見るべき構造（全て“場の結果”）</b><br>
+  ・渦: n·arg(x+iz) による回転（稜線が回る）<br>
+  ・リング: Φに caustic項 log((r-r_ph)^2+ε^2) を入れ |∇Φ| がリング状に増大 → 隆起帯として出現<br>
+  ・内部不可視: A=exp(-Ω/(r+ε)) により中心が穴/沈み込みとして出現<br>
+  ・XY/XZ/YZ断面で整合（3D感）
+</div>
+
+<div class="hud hidden" id="hud"></div>
+
+<script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+<script>
+(() => {
+  // ハンバーガーメニューの制御
+  const hintPanel = document.getElementById('hint');
+  const hintToggle = document.getElementById('hint-toggle');
+  const hudPanel = document.getElementById('hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  hintToggle.addEventListener('click', () => {
+    const isHidden = hintPanel.classList.contains('hidden');
+    if (isHidden) {
+      hintPanel.classList.remove('hidden');
+      hintToggle.classList.add('active');
+    } else {
+      hintPanel.classList.add('hidden');
+      hintToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene(); // no fog
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 3000);
+
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(()=>{ resize(); requestAnimationFrame(resize); });
+
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.10);
+  key.position.set(18, 28, 22);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x77bbff, 0.55);
+  rim.position.set(-30, 18, -24);
+  scene.add(rim);
+
+  // util
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const TAU=Math.PI*2;
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+  function hsvToRgb(h,s,v){
+    const c=v*s;
+    const hp=((h%1)+1)%1*6;
+    const x=c*(1-Math.abs((hp%2)-1));
+    let r=0,g=0,b=0;
+    if(hp<1){r=c;g=x;}
+    else if(hp<2){r=x;g=c;}
+    else if(hp<3){g=c;b=x;}
+    else if(hp<4){g=x;b=c;}
+    else if(hp<5){r=x;b=c;}
+    else {r=c;b=x;}
+    const m=v-c;
+    return {r:r+m,g:g+m,b:b+m};
+  }
+
+  // orbit
+  const cam = {drag:false, px:0, py:0, theta:1.20, phi:1.00, radius:18.0};
+  function updateCam(){
+    cam.phi = clamp(cam.phi, 0.18, Math.PI-0.18);
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY;
+    canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = clamp(cam.radius*s, 6, 80);
+  }, {passive:false});
+
+  // state
+  const st = {
+    paused:false,
+    showHUD:true,
+    t:0,
+    speed:1.0,
+    alpha:1.4,   // α
+    r:0.55,      // r
+    rho:1.0,     // ρ
+    n:2,         // winding n
+  };
+
+  const hud=document.getElementById('hud');
+  const hint=document.getElementById('hint');
+
+  // Derived quantities
+  function Omega(){ return st.alpha/(st.r*st.r + 1e-6); }
+  function r_ph(){
+    // caustic ring radius derived from Ω (monotone)
+    const om=Omega();
+    return 1.35 + 1.8*Math.tanh(0.18*om);
+  }
+
+  // Field Ψ = A exp(iΦ)
+  function fieldAt(x,y,z,t){
+    const rr = Math.sqrt(x*x+y*y+z*z) + 1e-6;
+    const om = Omega();
+    const rdef = st.r;
+
+    // amplitude (invisibility)
+    const A = Math.exp(-0.35*om/(rr + 0.12));
+
+    // phase components
+    // vortex around y-axis: arg(x+iz)
+    const angY = Math.atan2(z, x);
+    const vortex = st.n * angY;
+
+    // holonomy twist: depends on polar angle to y-axis
+    const angPol = Math.atan2(y, Math.sqrt(x*x+z*z)+1e-6);
+    const twist = st.rho * angPol;
+
+    // radial traveling wave
+    const wave = 1.8*Math.sin(1.15*rr - 1.9*t);
+
+    // caustic ring phase delay around r_ph
+    const rph = r_ph();
+    const eps = 0.08 + 0.10*rdef;
+    const lam = 1.4 + 1.2*Math.tanh(0.10*om);
+    const caustic = lam * Math.log((rr - rph)*(rr - rph) + eps*eps);
+
+    const Phi = vortex + twist + wave + caustic;
+
+    return {A, Phi, om, rr, rph};
+  }
+
+  // ridge height from |∇Φ| and |∇A|
+  function gradApprox(x,y,z,t){
+    const e=0.03;
+    const f0=fieldAt(x,y,z,t);
+    const fX=fieldAt(x+e,y,z,t);
+    const fY=fieldAt(x,y+e,z,t);
+    const fZ=fieldAt(x,y,z+e,t);
+
+    const dPhix=(fX.Phi - f0.Phi)/e;
+    const dPhiy=(fY.Phi - f0.Phi)/e;
+    const dPhiz=(fZ.Phi - f0.Phi)/e;
+    const gPhi=Math.sqrt(dPhix*dPhix + dPhiy*dPhiy + dPhiz*dPhiz);
+
+    const dAx=(fX.A - f0.A)/e;
+    const dAy=(fY.A - f0.A)/e;
+    const dAz=(fZ.A - f0.A)/e;
+    const gA=Math.sqrt(dAx*dAx + dAy*dAy + dAz*dAz);
+
+    return {gPhi, gA};
+  }
+
+  // Triple slices: XY(z=z0), XZ(y=y0), YZ(x=x0)
+  const N=150;
+  const L=5.5;
+
+  function makeSlice(kind, c0){
+    // kind: 0=XY (z=c0), 1=XZ (y=c0), 2=YZ (x=c0)
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N*N*3);
+    const col = new Float32Array(N*N*3);
+    const idx=[];
+    for(let j=0;j<N-1;j++){
+      for(let i=0;i<N-1;i++){
+        const a=j*N+i, b=a+1, c=a+N, d=c+1;
+        idx.push(a,c,b, b,c,d);
+      }
+    }
+    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors:true,
+      metalness:0.03,
+      roughness:0.45,
+      side:THREE.DoubleSide,
+      transparent:true,
+      opacity:0.55
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.kind=kind;
+    mesh.userData.c0=c0;
+    scene.add(mesh);
+    return {mesh, geo};
+  }
+
+  // 3 planes with symmetric offsets to enhance 3D
+  const slices=[];
+  // XY at z=-d, +d
+  slices.push(makeSlice(0, -0.95));
+  slices.push(makeSlice(0,  0.95));
+  // XZ at y=-d, +d
+  slices.push(makeSlice(1, -0.95));
+  slices.push(makeSlice(1,  0.95));
+  // YZ at x=-d, +d
+  slices.push(makeSlice(2, -0.95));
+  slices.push(makeSlice(2,  0.95));
+
+  function updateSlices(t){
+    for(const s of slices){
+      const kind=s.mesh.userData.kind;
+      const c0=s.mesh.userData.c0;
+      const P=s.geo.getAttribute('position');
+      const C=s.geo.getAttribute('color');
+
+      let k=0;
+      for(let j=0;j<N;j++){
+        const v=-L + (2*L)*j/(N-1);
+        for(let i=0;i<N;i++){
+          const u=-L + (2*L)*i/(N-1);
+
+          let x,y,z;
+          if(kind===0){ x=u; y=v; z=c0; }       // XY
+          else if(kind===1){ x=u; y=c0; z=v; }  // XZ
+          else { x=c0; y=u; z=v; }              // YZ
+
+          const f=fieldAt(x,y,z,t);
+          const g=gradApprox(x,y,z,t);
+
+          // ridge from phase and amplitude gradients
+          const ridgePhi = Math.tanh(0.22*g.gPhi) * (0.30 + 0.70*(1-f.A));
+          const ridgeA   = Math.tanh(0.25*g.gA)   * (0.25 + 0.75*(1-f.A));
+
+          // wave term from Phi
+          const waveH = 0.35*Math.sin(f.Phi) * (0.25 + 0.55*(1-f.A));
+
+          // sink from Omega (invisibility)
+          const sink = -0.38*Math.tanh(0.10*f.om/(f.rr+0.12));
+
+          // total displacement along the plane normal
+          // normal is +/- axis depending on plane:
+          // XY: normal z; XZ: normal y; YZ: normal x
+          const disp = 0.95*ridgePhi + 0.65*ridgeA + 0.55*waveH + sink;
+
+          if(kind===0){
+            P.array[k+0]=x; P.array[k+1]=y; P.array[k+2]=z + disp;
+          } else if(kind===1){
+            P.array[k+0]=x; P.array[k+1]=y + disp; P.array[k+2]=z;
+          } else {
+            P.array[k+0]=x + disp; P.array[k+1]=y; P.array[k+2]=z;
+          }
+
+          // Color: hue from phase; saturation from ridge; value from A (outside bright)
+          const hue = ((f.Phi/TAU)%1+1)%1;
+          const sat = clamp(0.25 + 0.65*ridgePhi, 0, 1);
+          const val = clamp(0.18 + 0.82*f.A, 0, 1);
+          const rgb=hsvToRgb(hue,sat,val);
+
+          C.array[k+0]=rgb.r; C.array[k+1]=rgb.g; C.array[k+2]=rgb.b;
+
+          k+=3;
+        }
+      }
+
+      P.needsUpdate=true;
+      C.needsUpdate=true;
+      s.geo.computeVertexNormals();
+
+      // opacity: central planes slightly more opaque
+      const base = (Math.abs(c0)<1e-6)?0.65:0.50;
+      s.mesh.material.opacity = base;
+    }
+  }
+
+  // minimal core marker (not a guide; just to orient)
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 24, 24),
+    new THREE.MeshStandardMaterial({color:0xff6b6b, emissive:0x220000, emissiveIntensity:1.0})
+  );
+  scene.add(core);
+
+  function updateCore(){
+    const om=Omega();
+    core.scale.setScalar(1.0 + 0.22*Math.tanh(0.20*om));
+    core.material.emissiveIntensity = 0.8 + 1.4*Math.tanh(0.15*om);
+    core.position.set(0,0,0);
+  }
+
+  function hudText(){
+    const om=Omega();
+    const rp=r_ph();
+    return [
+      "v14 — wavefield Ψ drives ridges; caustic ring emerges from Φ (no static lines)",
+      `t=${st.t.toFixed(2)} speed=${st.speed.toFixed(2)} paused=${st.paused}`,
+      `α=${st.alpha.toFixed(3)}  r=${st.r.toFixed(3)}  ρ=${st.rho.toFixed(3)}  n=${st.n}`,
+      `Ω=α/r²=${om.toFixed(4)}  r_ph(derived)=${rp.toFixed(3)}`,
+      "",
+      "Interpretation:",
+      " - Ring: caustic term makes |∇Φ| large near r≈r_ph ⇒ ridge torus appears in slices.",
+      " - Vortex: n·arg(x+iz) produces swirling ridge bands.",
+      " - Inside invisibility: A suppresses interior ⇒ sink/hole-like structure appears.",
+      " - XY/XZ/YZ slices make 3D structure legible."
+    ].join("\n");
+  }
+
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space') st.paused=!st.paused;
+    if(e.key==='h'||e.key==='H'){ 
+      st.showHUD=!st.showHUD; 
+      if(st.showHUD){
+        hud.classList.remove('hidden');
+        hint.classList.remove('hidden');
+        hudToggle.classList.add('active');
+        hintToggle.classList.add('active');
+      } else {
+        hud.classList.add('hidden');
+        hint.classList.add('hidden');
+        hudToggle.classList.remove('active');
+        hintToggle.classList.remove('active');
+      }
+    }
+    if(e.key==='[') st.speed = clamp(st.speed*0.8, 0.1, 6.0);
+    if(e.key===']') st.speed = clamp(st.speed*1.25,0.1,6.0);
+
+    if(e.key==='a'||e.key==='A') st.alpha = clamp(st.alpha+0.12, 0.0, 6.0);
+    if(e.key==='z'||e.key==='Z') st.alpha = clamp(st.alpha-0.12, 0.0, 6.0);
+
+    if(e.key==='r'||e.key==='R') st.r = clamp(st.r+0.06, 0.20, 2.8);
+    if(e.key==='f'||e.key==='F') st.r = clamp(st.r-0.06, 0.20, 2.8);
+
+    if(e.key==='q'||e.key==='Q') st.rho = clamp(st.rho-0.08, 0.0, 4.0);
+    if(e.key==='w'||e.key==='W') st.rho = clamp(st.rho+0.08, 0.0, 4.0);
+
+    if(e.key==='n'||e.key==='N') st.n = clamp(st.n+1, 0, 9);
+    if(e.key==='m'||e.key==='M') st.n = clamp(st.n-1, 0, 9);
+  });
+
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    updateCam();
+    if(!st.paused) st.t += dt*st.speed;
+
+    updateSlices(st.t);
+    updateCore();
+
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script></body>
+</html>
