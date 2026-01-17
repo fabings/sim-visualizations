@@ -69,6 +69,16 @@ const METADATA = {
       date: "2025-01-17",
       thumbnail: null,
       icon: "Y"
+    },
+    {
+      id: "ring-amplified-harmonics",
+      title: "Ring-Amplified Spherical Harmonics",
+      description: "球面調和関数に光子リング様の振幅増幅を導入。リングが「明るい帯」および「隆起帯」として自然に出現し、ブラックホール観測のような視覚効果を実現します。",
+      path: "./works/bh-bench/work-3/v3/index.html",
+      tags: ["Spherical Harmonics", "Quantum Mechanics", "Black Hole", "3D Visualization", "Three.js", "Photon Ring"],
+      date: "2025-01-17",
+      thumbnail: null,
+      icon: "⊚"
     }
     // 新しい作品をここに追加
     // 例:

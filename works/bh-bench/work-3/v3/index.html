@@ -1,0 +1,538 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>v16 Spherical Harmonics + Ring-Amplified Envelope (no fog, no point cloud)</title>
+  <style>
+    :root{
+      --bg:#050812; --panel:rgba(10,14,28,0.55); --border:rgba(180,200,255,0.18);
+      --text:#e9eeff; --muted:#b9c2ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:var(--sans);color:var(--text);
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+    
+    /* ハンバーガーメニューボタン */
+    .menu-toggle{
+      position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+      border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+    }
+    .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+    .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+    .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+    .menu-toggle:active{transform:scale(0.95);}
+    
+    #hint-toggle{top:12px;left:12px;}
+    #hud-toggle{top:12px;right:12px;}
+    
+    .hud{
+      position:fixed;right:12px;top:72px;width:min(860px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+      white-space:pre;pointer-events:none;overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+    }
+    .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;visibility:hidden;}
+    
+    .hint{
+      position:fixed;left:12px;top:72px;width:min(650px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-size:11px;line-height:1.55;color:var(--muted);overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+    }
+    .hint.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+    
+    .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--muted);}
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .menu-toggle{width:45px;height:45px;}
+      .hint,.hud{max-width:calc(100vw - 84px);}
+    }
+    
+    @media (max-width: 480px) {
+      .menu-toggle{width:40px;height:40px;}
+      .menu-toggle span{width:24px;}
+      #hint-toggle,#hud-toggle{top:10px;}
+      #hint-toggle{left:10px;}
+      #hud-toggle{right:10px;}
+      .hint{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+      .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+      .hint,.hud{font-size:10px;}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="hint-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="hint hidden" id="hint">
+  <b>v16: ring-amplified envelope (BH-like observation)</b><br>
+  <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+  <span class="kbd">space</span> pause,
+  <span class="kbd">H</span> HUD,
+  <span class="kbd">A/Z</span> α,
+  <span class="kbd">R/F</span> r,
+  <span class="kbd">Q/W</span> ρ,
+  <span class="kbd">L/K</span> ℓ±,
+  <span class="kbd">M/N</span> m±,
+  <span class="kbd">[ ]</span> speed
+  <br><br>
+  <b>改善点</b><br>
+  ・振幅 A(r) に ring 増幅 1+η exp(-(r-r_ph)^2/(2σ^2)) を導入<br>
+  ・これにより ring が「色」ではなく <b>明るい帯</b> として出現（静的リングは描かない）<br>
+  ・隆起にも |∇A| を入れ、リングが <b>隆起帯</b>としても現れる
+</div>
+
+<div class="hud hidden" id="hud"></div>
+
+<script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+<script>
+(() => {
+  // ハンバーガーメニューの制御
+  const hintPanel = document.getElementById('hint');
+  const hintToggle = document.getElementById('hint-toggle');
+  const hudPanel = document.getElementById('hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  hintToggle.addEventListener('click', () => {
+    const isHidden = hintPanel.classList.contains('hidden');
+    if (isHidden) {
+      hintPanel.classList.remove('hidden');
+      hintToggle.classList.add('active');
+    } else {
+      hintPanel.classList.add('hidden');
+      hintToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene(); // no fog
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 5000);
+
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(()=>{ resize(); requestAnimationFrame(resize); });
+
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.10);
+  key.position.set(18, 28, 22);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x77bbff, 0.55);
+  rim.position.set(-30, 18, -24);
+  scene.add(rim);
+
+  // util
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const TAU=Math.PI*2;
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+  function hsvToRgb(h,s,v){
+    const c=v*s;
+    const hp=((h%1)+1)%1*6;
+    const x=c*(1-Math.abs((hp%2)-1));
+    let r=0,g=0,b=0;
+    if(hp<1){r=c;g=x;}
+    else if(hp<2){r=x;g=c;}
+    else if(hp<3){g=c;b=x;}
+    else if(hp<4){g=x;b=c;}
+    else if(hp<5){r=x;b=c;}
+    else {r=c;b=x;}
+    const m=v-c;
+    return {r:r+m,g:g+m,b:b+m};
+  }
+
+  // orbit
+  const cam = {drag:false, px:0, py:0, theta:1.15, phi:1.00, radius:18.0};
+  function updateCam(){
+    cam.phi = clamp(cam.phi, 0.18, Math.PI-0.18);
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY;
+    canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = clamp(cam.radius*s, 6, 100);
+  }, {passive:false});
+
+  // state
+  const st = {
+    paused:false,
+    showHUD:true,
+    t:0,
+    speed:1.0,
+    alpha:1.8,
+    r:0.55,
+    rho:1.2,
+    ell:3,
+    m:1
+  };
+
+  const hud=document.getElementById('hud');
+  const hint=document.getElementById('hint');
+
+  function Omega(){ return st.alpha/(st.r*st.r + 1e-6); }
+  function r_ph(){
+    const om=Omega();
+    return 1.35 + 1.8*Math.tanh(0.18*om);
+  }
+
+  // spherical harmonics machinery (same as v15)
+  function factorial(n){ let r=1; for(let i=2;i<=n;i++) r*=i; return r; }
+
+  function P_l_m(l,m,x){
+    let pmm=1.0;
+    if(m>0){
+      const somx2 = Math.sqrt(Math.max(0,1.0-x*x));
+      let fact=1.0;
+      for(let i=1;i<=m;i++){
+        pmm *= -fact*somx2;
+        fact += 2.0;
+      }
+    }
+    if(l===m) return pmm;
+    let pmmp1 = x*(2*m+1)*pmm;
+    if(l===m+1) return pmmp1;
+    let pll=0.0;
+    let p1=pmmp1, p2=pmm;
+    for(let ll=m+2; ll<=l; ll++){
+      pll = ((2*ll-1)*x*p1 - (ll+m-1)*p2)/(ll-m);
+      p2=p1; p1=pll;
+    }
+    return pll;
+  }
+
+  function K_l_m(l,m){
+    const num = (2*l+1);
+    const a = factorial(l-m);
+    const b = factorial(l+m);
+    return Math.sqrt(num/(4*Math.PI) * a/b);
+  }
+
+  function Y_lm_real(l,m,theta,phi){
+    const x = Math.cos(theta);
+    const am = Math.abs(m);
+    const P = P_l_m(l, am, x);
+    const K = K_l_m(l, am);
+    if(m>0){
+      return Math.sqrt(2)*K*P*Math.cos(am*phi);
+    } else if(m<0){
+      return Math.sqrt(2)*K*P*Math.sin(am*phi);
+    } else {
+      return K*P;
+    }
+  }
+
+  // rotation by rho
+  const qRot = new THREE.Quaternion();
+  const axisRot = new THREE.Vector3(0,1,0);
+
+  // ring-amplified envelope A(r)
+  function envelopeA(rr, t){
+    const om = Omega();
+
+    // absorption core (invisibility)
+    const Aabs = Math.exp(-0.35*om/(rr + 0.12));
+
+    // ring amplification around rph
+    const rph = r_ph();
+    const sigma = 0.18 + 0.20*st.r;         // ring thickness
+    const eta = 0.35 + 1.10*Math.tanh(0.10*om); // ring brightness gain, monotone in Ω
+    const ring = 1.0 + eta*Math.exp(-((rr-rph)*(rr-rph))/(2*sigma*sigma));
+
+    // mild time modulation so ring "breathes" but remains stable
+    const breath = 1.0 + 0.10*Math.sin(0.9*t) * Math.exp(-((rr-rph)*(rr-rph))/(2*(1.8*sigma)*(1.8*sigma)));
+
+    return clamp(Aabs * ring * breath, 0.0, 2.2);
+  }
+
+  // scalar field Psi
+  function fieldPsi(x,y,z,t){
+    // rotate coordinates by rho-driven rotation
+    axisRot.set(Math.sin(0.18*t), Math.cos(0.14*t+1.1), Math.sin(0.16*t-0.7)).normalize();
+    qRot.setFromAxisAngle(axisRot, st.rho*0.35*t);
+
+    const v = new THREE.Vector3(x,y,z).applyQuaternion(qRot.clone().invert());
+    const rr = Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z)+1e-6;
+
+    const theta = Math.acos(clamp(v.y/rr, -1, 1));
+    const phi = Math.atan2(v.z, v.x);
+
+    const A = envelopeA(rr, t);
+    const Y = Y_lm_real(st.ell, st.m, theta, phi);
+
+    // phase: traveling + caustic
+    const k=2.2, omegaW=1.8;
+    const wavePhase = k*rr - omegaW*t;
+
+    const rph = r_ph();
+    const eps = 0.06 + 0.10*st.r;
+    const lam = 0.9 + 1.6*Math.tanh(0.10*Omega());
+    const caustic = lam*Math.log((rr-rph)*(rr-rph)+eps*eps);
+
+    const Phi = wavePhase + caustic;
+
+    // complex real-part style
+    const psi = A * Y * Math.cos(Phi);
+
+    return {psi, A, Y, Phi, rr, rph};
+  }
+
+  function gradApprox(x,y,z,t){
+    const e=0.03;
+    const f0=fieldPsi(x,y,z,t);
+    const fx=fieldPsi(x+e,y,z,t).psi - f0.psi;
+    const fy=fieldPsi(x,y+e,z,t).psi - f0.psi;
+    const fz=fieldPsi(x,y,z+e,t).psi - f0.psi;
+    const gPsi=Math.sqrt(fx*fx+fy*fy+fz*fz)/e;
+
+    const a0=f0.A;
+    const ax=fieldPsi(x+e,y,z,t).A - a0;
+    const ay=fieldPsi(x,y+e,z,t).A - a0;
+    const az=fieldPsi(x,y,z+e,t).A - a0;
+    const gA=Math.sqrt(ax*ax+ay*ay+az*az)/e;
+
+    return {gPsi, gA, f0};
+  }
+
+  // slices: XY/XZ/YZ at ±d
+  const N=150;
+  const L=5.5;
+  const d=0.95;
+  const slices=[];
+
+  function makeSlice(kind, c0){
+    const geo=new THREE.BufferGeometry();
+    const pos=new Float32Array(N*N*3);
+    const col=new Float32Array(N*N*3);
+    const idx=[];
+    for(let j=0;j<N-1;j++){
+      for(let i=0;i<N-1;i++){
+        const a=j*N+i, b=a+1, c=a+N, d2=c+1;
+        idx.push(a,c,b, b,c,d2);
+      }
+    }
+    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+    const mat=new THREE.MeshStandardMaterial({
+      vertexColors:true,
+      metalness:0.03,
+      roughness:0.42,
+      side:THREE.DoubleSide,
+      transparent:true,
+      opacity:0.55
+    });
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.userData.kind=kind;
+    mesh.userData.c0=c0;
+    scene.add(mesh);
+    return {mesh,geo};
+  }
+
+  // XY z=±d
+  slices.push(makeSlice(0,-d)); slices.push(makeSlice(0, d));
+  // XZ y=±d
+  slices.push(makeSlice(1,-d)); slices.push(makeSlice(1, d));
+  // YZ x=±d
+  slices.push(makeSlice(2,-d)); slices.push(makeSlice(2, d));
+
+  function updateSlices(t){
+    for(const s of slices){
+      const kind=s.mesh.userData.kind;
+      const c0=s.mesh.userData.c0;
+      const P=s.geo.getAttribute('position');
+      const C=s.geo.getAttribute('color');
+
+      let k=0;
+      for(let j=0;j<N;j++){
+        const v=-L + (2*L)*j/(N-1);
+        for(let i=0;i<N;i++){
+          const u=-L + (2*L)*i/(N-1);
+
+          let x,y,z;
+          if(kind===0){ x=u; y=v; z=c0; }
+          else if(kind===1){ x=u; y=c0; z=v; }
+          else { x=c0; y=u; z=v; }
+
+          const g=gradApprox(x,y,z,t);
+          const f=g.f0;
+
+          // ridge from gradients: ring is now enhanced by |∇A| automatically
+          const ridgePsi = Math.tanh(0.35*g.gPsi) * (0.25 + 0.75*(1/Math.max(1e-6,f.A))); // if A amplified, reduce suppression
+          const ridgeA   = Math.tanh(0.40*g.gA)   * (0.35 + 0.65*(1/Math.max(1e-6,f.A)));
+
+          // wave term from ψ (shows oscillation)
+          const waveH = 0.55 * f.psi;
+
+          // sink from Omega (invisibility)
+          const sink = -0.30*Math.tanh(0.10*Omega()/(f.rr+0.12));
+
+          const disp = 0.85*ridgePsi + 0.85*ridgeA + waveH + sink;
+
+          if(kind===0){
+            P.array[k+0]=x; P.array[k+1]=y; P.array[k+2]=z + disp;
+          } else if(kind===1){
+            P.array[k+0]=x; P.array[k+1]=y + disp; P.array[k+2]=z;
+          } else {
+            P.array[k+0]=x + disp; P.array[k+1]=y; P.array[k+2]=z;
+          }
+
+          // color: ring amplification should manifest as brightness
+          // hue from Phi, sat from ridge, val from A but clipped
+          const hue = ((f.Phi/TAU)%1+1)%1;
+          const sat = clamp(0.20 + 0.75*(ridgePsi+ridgeA)*0.5, 0, 1);
+          const val = clamp(0.12 + 0.88*Math.min(1.0, f.A) * (0.35+0.65*Math.min(1, Math.abs(f.Y)*4)), 0, 1);
+          const rgb=hsvToRgb(hue,sat,val);
+
+          C.array[k+0]=rgb.r; C.array[k+1]=rgb.g; C.array[k+2]=rgb.b;
+          k+=3;
+        }
+      }
+      P.needsUpdate=true;
+      C.needsUpdate=true;
+      s.geo.computeVertexNormals();
+
+      const base = (Math.abs(c0)<1e-6)?0.62:0.48;
+      s.mesh.material.opacity = base;
+    }
+  }
+
+  // core marker (minimal)
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 24, 24),
+    new THREE.MeshStandardMaterial({color:0xff6b6b, emissive:0x220000, emissiveIntensity:1.0})
+  );
+  scene.add(core);
+
+  function updateCore(){
+    const om=Omega();
+    core.scale.setScalar(1.0 + 0.25*Math.tanh(0.20*om));
+    core.material.emissiveIntensity = 0.8 + 1.4*Math.tanh(0.15*om);
+    core.position.set(0,0,0);
+  }
+
+  function hudText(){
+    const om=Omega();
+    const rp=r_ph();
+    return [
+      "v16 — ring-amplified envelope: A = A_absorb * (1 + η exp(-(r-r_ph)^2/(2σ^2)))",
+      `t=${st.t.toFixed(2)} speed=${st.speed.toFixed(2)} paused=${st.paused}`,
+      `α=${st.alpha.toFixed(3)} r=${st.r.toFixed(3)} Ω=${om.toFixed(4)} ρ=${st.rho.toFixed(3)} ℓ=${st.ell} m=${st.m}`,
+      `derived r_ph=${rp.toFixed(3)} (ring radius proxy)`,
+      "",
+      "Reading (shape-only):",
+      "- bright band appears near r≈r_ph because A amplifies there (not a drawn ring).",
+      "- node boundaries of Yℓm create ridges via |∇Ψ| (molecular-orbital style).",
+      "- rotation (ρ) rotates the entire angular mode field.",
+      "- center sink/hole increases with Ω (inside becomes invisible surrogate)."
+    ].join("\n");
+  }
+
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space') st.paused=!st.paused;
+    if(e.key==='h'||e.key==='H'){ 
+      st.showHUD=!st.showHUD; 
+      if(st.showHUD){
+        hud.classList.remove('hidden');
+        hint.classList.remove('hidden');
+        hudToggle.classList.add('active');
+        hintToggle.classList.add('active');
+      } else {
+        hud.classList.add('hidden');
+        hint.classList.add('hidden');
+        hudToggle.classList.remove('active');
+        hintToggle.classList.remove('active');
+      }
+    }
+    if(e.key==='[') st.speed = clamp(st.speed*0.8, 0.1, 6.0);
+    if(e.key===']') st.speed = clamp(st.speed*1.25,0.1,6.0);
+
+    if(e.key==='a'||e.key==='A') st.alpha = clamp(st.alpha+0.18, 0.0, 12.0);
+    if(e.key==='z'||e.key==='Z') st.alpha = clamp(st.alpha-0.18, 0.0, 12.0);
+
+    if(e.key==='r'||e.key==='R') st.r = clamp(st.r+0.06, 0.20, 4.0);
+    if(e.key==='f'||e.key==='F') st.r = clamp(st.r-0.06, 0.20, 4.0);
+
+    if(e.key==='q'||e.key==='Q') st.rho = clamp(st.rho-0.10, 0.0, 8.0);
+    if(e.key==='w'||e.key==='W') st.rho = clamp(st.rho+0.10, 0.0, 8.0);
+
+    if(e.key==='l'||e.key==='L') st.ell = clamp(st.ell+1, 0, 12);
+    if(e.key==='k'||e.key==='K') st.ell = clamp(st.ell-1, 0, 12);
+
+    if(e.key==='m'||e.key==='M') st.m = clamp(st.m+1, -st.ell, st.ell);
+    if(e.key==='n'||e.key==='N') st.m = clamp(st.m-1, -st.ell, st.ell);
+  });
+
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    updateCam();
+    if(!st.paused) st.t += dt*st.speed;
+
+    // keep m within [-ℓ,ℓ]
+    st.m = clamp(st.m, -st.ell, st.ell);
+
+    updateSlices(st.t);
+    updateCore();
+
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script></body>
+</html>
