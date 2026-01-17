@@ -1,0 +1,552 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>v12 θ–μ–Defect Riemann/Glyph/Vortex (no fog, no point cloud)</title>
+  <style>
+    :root{
+      --bg:#050812; --panel:rgba(10,14,28,0.58); --border:rgba(180,200,255,0.18);
+      --text:#e9eeff; --muted:#b9c2ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:var(--sans);color:var(--text);
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+    
+    /* ハンバーガーメニューボタン */
+    .menu-toggle{
+      position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+      border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+      display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+    }
+    .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+    .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+    .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+    .menu-toggle:active{transform:scale(0.95);}
+    
+    #hint-toggle{top:12px;left:12px;}
+    #hud-toggle{top:12px;right:12px;}
+    
+    .hud{
+      position:fixed;right:12px;top:72px;width:min(720px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+      white-space:pre;pointer-events:none;overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+    }
+    .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;visibility:hidden;}
+    
+    .hint{
+      position:fixed;left:12px;top:72px;width:min(560px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+      z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;font-size:11px;line-height:1.5;color:var(--muted);overflow-y:auto;
+      transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+    }
+    .hint.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+    
+    .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--muted);}
+    
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .menu-toggle{width:45px;height:45px;}
+      .hint,.hud{max-width:calc(100vw - 84px);}
+    }
+    
+    @media (max-width: 480px) {
+      .menu-toggle{width:40px;height:40px;}
+      .menu-toggle span{width:24px;}
+      #hint-toggle,#hud-toggle{top:10px;}
+      #hint-toggle{left:10px;}
+      #hud-toggle{right:10px;}
+      .hint{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+      .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+      .hint,.hud{font-size:10px;}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="hint-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="hint hidden" id="hint">
+  <b>v12: shape-first visualization</b><br>
+  <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+  <span class="kbd">space</span> pause,
+  <span class="kbd">1/2/3</span> scene,
+  <span class="kbd">A/Z</span> α,
+  <span class="kbd">R/F</span> r,
+  <span class="kbd">Q/W</span> ρ,
+  <span class="kbd">[ ]</span> speed,
+  <span class="kbd">G</span> guides,
+  <span class="kbd">H</span> HUD
+  <br><br>
+  <b>何が見えるべきか</b><br>
+  1) branch点周りで <b>glyph（短線分）が回転</b> ⇒ 位相/ホロノミーが“形”で見える<br>
+  2) Z変位が <b>位相の波紋</b>として回転 ⇒ 波動が見える<br>
+  3) horizon ring & hole ⇒ 内部不可視が“領域”として見える<br>
+  4) branch cut ⇒ 貼り合わせが見える
+</div>
+
+<div class="hud hidden" id="hud"></div>
+
+<script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+<script>
+(() => {
+  // ハンバーガーメニューの制御
+  const hintPanel = document.getElementById('hint');
+  const hintToggle = document.getElementById('hint-toggle');
+  const hudPanel = document.getElementById('hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  hintToggle.addEventListener('click', () => {
+    const isHidden = hintPanel.classList.contains('hidden');
+    if (isHidden) {
+      hintPanel.classList.remove('hidden');
+      hintToggle.classList.add('active');
+    } else {
+      hintPanel.classList.add('hidden');
+      hintToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene(); // no fog
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 3000);
+
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(()=>{ resize(); requestAnimationFrame(resize); });
+
+  // lights
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.50));
+  const key = new THREE.DirectionalLight(0xffffff, 1.10);
+  key.position.set(18, 28, 22);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x77bbff, 0.55);
+  rim.position.set(-30, 18, -24);
+  scene.add(rim);
+
+  // util
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const TAU=Math.PI*2;
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+  function hsvToRgb(h,s,v){
+    const c=v*s;
+    const hp=((h%1)+1)%1*6;
+    const x=c*(1-Math.abs((hp%2)-1));
+    let r=0,g=0,b=0;
+    if(hp<1){r=c;g=x;}
+    else if(hp<2){r=x;g=c;}
+    else if(hp<3){g=c;b=x;}
+    else if(hp<4){g=x;b=c;}
+    else if(hp<5){r=x;b=c;}
+    else {r=c;b=x;}
+    const m=v-c;
+    return {r:r+m,g:g+m,b:b+m};
+  }
+
+  // orbit
+  const cam = {drag:false, px:0, py:0, theta:1.15, phi:1.05, radius:16.0};
+  function updateCam(){
+    cam.phi = clamp(cam.phi, 0.18, Math.PI-0.18);
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY;
+    canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = clamp(cam.radius*s, 6, 55);
+  }, {passive:false});
+
+  // state
+  const state = {
+    scene: 2,
+    paused: false,
+    showGuides: true,
+    showHUD: true,
+    t: 0,
+    speed: 1.0,
+    alpha: 1.10,   // branch strength
+    rdef: 0.55,    // folding radius proxy
+    rho: 0.90,     // holonomy/twist strength
+  };
+
+  function phaseS(t){ return clamp(t/28.0, 0, 1); }
+
+  // complex sqrt
+  function complexSqrt(re, im){
+    const r = Math.hypot(re, im);
+    const a = Math.atan2(im, re);
+    const sr = Math.sqrt(r);
+    const ha = a/2;
+    return {re: sr*Math.cos(ha), im: sr*Math.sin(ha), arg: a, r};
+  }
+
+  // ===== Surfaces (two sheets) =====
+  const N=140;
+  function makeSurface(){
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N*N*3);
+    const col = new Float32Array(N*N*3);
+    const idx = [];
+    for(let j=0;j<N-1;j++){
+      for(let i=0;i<N-1;i++){
+        const a=j*N+i;
+        const b=a+1;
+        const c=a+N;
+        const d=c+1;
+        idx.push(a,c,b, b,c,d);
+      }
+    }
+    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors:true,
+      metalness:0.05,
+      roughness:0.45,
+      side:THREE.DoubleSide,
+      transparent:true,
+      opacity:0.92
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    return {mesh, geo};
+  }
+  const S1 = makeSurface();
+  const S2 = makeSurface();
+  scene.add(S1.mesh);
+  scene.add(S2.mesh);
+
+  // ===== Guides: branch point, cut, horizon ring, hole outline =====
+  const guides = new THREE.Group();
+  scene.add(guides);
+
+  const bp = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 24, 24),
+    new THREE.MeshStandardMaterial({color:0xff6b6b, emissive:0x220000, emissiveIntensity:1.2})
+  );
+  guides.add(bp);
+
+  const cutLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color:0xffcc66, transparent:true, opacity:0.8}));
+  guides.add(cutLine);
+
+  const horizonLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color:0x7aa7ff, transparent:true, opacity:0.85}));
+  guides.add(horizonLine);
+
+  // ===== Glyph field: short segments showing phase direction (THIS makes rotation visible) =====
+  const glyphN = 5200;
+  const glyphGeo = new THREE.BufferGeometry();
+  glyphGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(glyphN*2*3),3));
+  glyphGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(glyphN*2*3),3));
+  const glyphMat = new THREE.LineBasicMaterial({vertexColors:true, transparent:true, opacity:0.92});
+  const glyphLines = new THREE.LineSegments(glyphGeo, glyphMat);
+  scene.add(glyphLines);
+
+  // sample glyph positions on a grid subset (fixed in base domain)
+  const glyphPts=[];
+  const L=4.0;
+  for(let k=0;k<glyphN;k++){
+    // stratified sampling
+    const u = -L + (2*L)*( (k%80)/79 );
+    const v = -L + (2*L)*( Math.floor(k/80)/64 );
+    glyphPts.push({x:u, y:v});
+  }
+
+  // ===== Update step =====
+  function updateAll(dt){
+    const s = phaseS(state.t);
+    const nucleate = smoothstep((s-0.28)/0.18);
+    const post = smoothstep((s-0.55)/0.22);
+
+    // branch point z0(t)
+    const z0x = 0.85*Math.cos(0.7*state.t)*nucleate;
+    const z0y = 0.85*Math.sin(0.55*state.t)*nucleate;
+
+    // horizon radius (in base plane) and hole radius
+    const Rh = post*(0.65 + 0.75*state.rdef);
+
+    // strong fold parameters
+    const alpha = state.alpha*(0.30 + 1.8*nucleate);
+    const rdef = state.rdef;
+    const scaleNear = (0.40 + 2.8*(1.0/rdef)); // makes Z variation large & visible
+
+    // surface fill
+    function fillSurface(geo, sign){
+      const P=geo.getAttribute('position');
+      const C=geo.getAttribute('color');
+
+      let idx=0;
+      for(let j=0;j<N;j++){
+        const y = -L + (2*L)*j/(N-1);
+        for(let i=0;i<N;i++){
+          const x = -L + (2*L)*i/(N-1);
+
+          const zx = x - z0x;
+          const zy = y - z0y;
+          const w = complexSqrt(zx, zy);
+
+          const dist = Math.hypot(zx, zy) + 1e-6;
+          const amp = 1.0 + nucleate*(scaleNear/(dist + 0.18)); // much stronger than v11
+
+          // wave: use phase arg(w) + time to create visible wavefronts
+          const wave = Math.sin(w.arg + 1.9*state.t) * (0.25 + 0.55*nucleate);
+
+          // embed: Z is combination of (sheet separation) + (phase wave)
+          let Z = sign * alpha * w.im * amp + alpha*0.55*wave*amp;
+
+          // hole: remove inside horizon by pushing down strongly (visual "missing" region)
+          const rr = Math.hypot(x, y);
+          const inside = (Rh>1e-6) ? clamp(1.0 - rr/(Rh+1e-6), 0, 1) : 0;
+          Z = Z*(1.0 - 0.995*inside) - 2.2*inside;
+
+          P.array[idx+0]=x;
+          P.array[idx+1]=y;
+          P.array[idx+2]=Z;
+
+          // color: hue from arg(w) shows phase winding; add sheet offset
+          const hue = ((w.arg/TAU) + (sign<0?0.55:0.05)) % 1;
+          const sat = clamp(0.30 + 0.65*nucleate + 0.15*post, 0, 1);
+          const val = clamp(0.30 + 0.70*(1.0 - 0.85*inside), 0, 1);
+          const rgb=hsvToRgb(hue, sat, val);
+          C.array[idx+0]=rgb.r;
+          C.array[idx+1]=rgb.g;
+          C.array[idx+2]=rgb.b;
+
+          idx+=3;
+        }
+      }
+      P.needsUpdate=true;
+      C.needsUpdate=true;
+      geo.computeVertexNormals();
+    }
+
+    fillSurface(S1.geo, +1);
+    fillSurface(S2.geo, -1);
+
+    // show/hide second sheet by scene
+    if(state.scene===1){
+      S2.mesh.material.opacity = 0.0;
+      S1.mesh.material.opacity = 0.96;
+    } else {
+      S1.mesh.material.opacity = 0.90;
+      S2.mesh.material.opacity = 0.82;
+    }
+
+    // guides
+    guides.visible = state.showGuides;
+
+    bp.position.set(z0x,z0y, 0.0);
+    bp.scale.setScalar(1.0 + 1.2*nucleate);
+
+    // branch cut: ray from z0 to left
+    {
+      const pts=[];
+      const cutLen=6.0;
+      const nCut=80;
+      for(let k=0;k<nCut;k++){
+        const t=k/(nCut-1);
+        pts.push(new THREE.Vector3(z0x-cutLen*t, z0y, 0.02));
+      }
+      cutLine.geometry.dispose();
+      cutLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+      cutLine.material.opacity = 0.10 + 0.80*nucleate;
+    }
+
+    // horizon ring outline
+    {
+      const pts=[];
+      const nH=180;
+      for(let k=0;k<=nH;k++){
+        const a=TAU*k/nH;
+        pts.push(new THREE.Vector3(Rh*Math.cos(a), Rh*Math.sin(a), 0.03));
+      }
+      horizonLine.geometry.dispose();
+      horizonLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+      horizonLine.material.opacity = 0.10 + 0.85*post;
+    }
+
+    // ===== Glyph field update =====
+    // Each glyph is a short segment whose direction encodes phase arg(w) and holonomy strength rho.
+    // This is the main "rotation visible" channel.
+    const gp = glyphGeo.getAttribute('position').array;
+    const gc = glyphGeo.getAttribute('color').array;
+
+    for(let k=0;k<glyphPts.length;k++){
+      const x=glyphPts[k].x;
+      const y=glyphPts[k].y;
+
+      const zx=x-z0x;
+      const zy=y-z0y;
+      const w=complexSqrt(zx,zy);
+
+      // local phase angle for direction
+      const phi = 0.5*w.arg; // square-root has half-angle; makes monodromy visible
+      // holonomy twist adds time-dependent offset
+      const hol = state.rho*nucleate*(0.6+0.4*Math.sin(0.9*state.t));
+      const th = phi + hol;
+
+      // glyph length: stronger near branch point, controlled by rdef
+      const dist=Math.hypot(zx,zy)+1e-6;
+      const len = (0.12 + 0.28*nucleate) * (1.0 + 0.9/(dist + 0.25)) * (1.0/rdef);
+
+      // place glyph slightly above base plane using a mild Z from sheet 1
+      const baseZ = 0.10*Math.sin(w.arg + 1.9*state.t) * nucleate;
+
+      // horizon hole: suppress glyph inside Rh
+      const rr=Math.hypot(x,y);
+      const inside = (Rh>1e-6) ? (rr<Rh ? 1:0) : 0;
+
+      const dx = Math.cos(th)*len*(1-inside);
+      const dy = Math.sin(th)*len*(1-inside);
+
+      // segment endpoints
+      const i0 = k*6;
+      gp[i0+0]=x-dx; gp[i0+1]=y-dy; gp[i0+2]=baseZ;
+      gp[i0+3]=x+dx; gp[i0+4]=y+dy; gp[i0+5]=baseZ;
+
+      // color: encode winding by hue from arg(w), saturation by rho, value by outside/inside
+      const hue=((w.arg/TAU)%1+1)%1;
+      const sat=clamp(0.25 + 0.75*hol, 0, 1);
+      const val=inside?0.0:clamp(0.25 + 0.75*nucleate, 0, 1);
+      const rgb=hsvToRgb(hue,sat,val);
+      gc[i0+0]=rgb.r; gc[i0+1]=rgb.g; gc[i0+2]=rgb.b;
+      gc[i0+3]=rgb.r; gc[i0+4]=rgb.g; gc[i0+5]=rgb.b;
+    }
+    glyphGeo.getAttribute('position').needsUpdate=true;
+    glyphGeo.getAttribute('color').needsUpdate=true;
+
+    glyphMat.opacity = (state.scene===1)? 0.0 : (0.35 + 0.60*nucleate);
+
+    // scene 3: emphasize hole and post
+    if(state.scene===3){
+      horizonLine.material.opacity = 0.25 + 0.75*post;
+      cutLine.material.opacity = 0.25 + 0.75*nucleate;
+      glyphMat.opacity = 0.40 + 0.55*nucleate;
+    }
+  }
+
+  // HUD
+  const hud=document.getElementById('hud');
+  const hint=document.getElementById('hint');
+  function hudText(){
+    const s=phaseS(state.t);
+    const nucleate=smoothstep((s-0.28)/0.18);
+    const post=smoothstep((s-0.55)/0.22);
+    return [
+      "v12 — Riemann surface + phase-glyph field (no fog, no point cloud)",
+      `scene=${state.scene}  t=${state.t.toFixed(2)}  s=${s.toFixed(3)}  speed=${state.speed.toFixed(2)}  paused=${state.paused}`,
+      "",
+      `α=${state.alpha.toFixed(3)}  r=${state.rdef.toFixed(3)}  ρ=${state.rho.toFixed(3)}`,
+      `nucleate=${nucleate.toFixed(3)}  post(horizon-hole)=${post.toFixed(3)}`,
+      "",
+      "What should be clearly visible now:",
+      "- Glyphs rotate around the branch point (phase/holonomy as shape).",
+      "- Surface shows strong Z folding & phase wavefronts.",
+      "- Horizon hole becomes a real missing region (inside not visible).",
+      "- Branch cut is explicit (re-gluing path)."
+    ].join("\n");
+  }
+
+  function setScene(k){ state.scene=k; }
+  function reset(){ state.t=0; }
+
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space'){ state.paused=!state.paused; }
+    if(e.key==='1') setScene(1);
+    if(e.key==='2') setScene(2);
+    if(e.key==='3') setScene(3);
+    if(e.key==='g'||e.key==='G') state.showGuides=!state.showGuides;
+    if(e.key==='h'||e.key==='H'){ 
+      state.showHUD=!state.showHUD; 
+      if(state.showHUD){
+        hud.classList.remove('hidden');
+        hint.classList.remove('hidden');
+        hudToggle.classList.add('active');
+        hintToggle.classList.add('active');
+      } else {
+        hud.classList.add('hidden');
+        hint.classList.add('hidden');
+        hudToggle.classList.remove('active');
+        hintToggle.classList.remove('active');
+      }
+    }
+    if(e.key==='r'||e.key==='R') reset();
+    if(e.key==='[') state.speed = clamp(state.speed*0.8, 0.1, 5.0);
+    if(e.key===']') state.speed = clamp(state.speed*1.25,0.1,5.0);
+    if(e.key==='a'||e.key==='A') state.alpha = clamp(state.alpha+0.06, 0.0, 3.0);
+    if(e.key==='z'||e.key==='Z') state.alpha = clamp(state.alpha-0.06, 0.0, 3.0);
+    if(e.key==='r'||e.key==='R'){} // already used
+    if(e.key==='f'||e.key==='F') state.rdef = clamp(state.rdef-0.05, 0.2, 2.2);
+    if(e.key==='d'||e.key==='D') state.rdef = clamp(state.rdef+0.05, 0.2, 2.2);
+    if(e.key==='q'||e.key==='Q') state.rho = clamp(state.rho-0.05, 0.0, 2.5);
+    if(e.key==='w'||e.key==='W') state.rho = clamp(state.rho+0.05, 0.0, 2.5);
+  });
+
+  // animate
+  let last=performance.now();
+  function frame(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    updateCam();
+    if(!state.paused) state.t += dt*state.speed;
+    updateAll(dt);
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  setScene(2);
+  requestAnimationFrame(frame);
+
+})();
+</script></body>
+</html>

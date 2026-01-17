@@ -24,6 +24,16 @@
       "date": "2025-01-17",
       "thumbnail": null,
       "icon": "◉"
+    },
+    {
+      "id": "riemann-surface-defect",
+      "title": "Riemann Surface: θ–μ–Defect Glyph Field",
+      "description": "リーマン面上の位相欠陥を、グリフ場（方向性を持つ短線分）で可視化。分岐点周りの回転、位相波紋、事象の地平線による「穴」を、形状として直接観測できます。",
+      "path": "./works/bh-bench/work-2/index.html",
+      "tags": ["Riemann Surface", "Complex Analysis", "Topology", "3D Visualization", "Three.js", "Defect Theory"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "⊗"
     }
   ]
 }
