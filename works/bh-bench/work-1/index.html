@@ -1,0 +1,725 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>v8 BH θ/μ/defect — integrated 3D (ring/shadow/holonomy/folding)</title>
+<style>
+  :root{
+    --bg:#050812;
+    --panel: rgba(10,14,28,0.76);
+    --border: rgba(180,200,255,0.22);
+    --text:#e9eeff;
+    --muted:#b9c2ff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+  canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;}
+  
+  /* ハンバーガーメニューボタン */
+  .menu-toggle{
+    position:fixed;width:50px;height:50px;background:rgba(10,14,28,0.95);
+    border:2px solid var(--border);border-radius:8px;cursor:pointer;z-index:12;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+    transition:all 0.3s cubic-bezier(0.4,0,0.2,1);backdrop-filter:blur(10px);
+  }
+  .menu-toggle span{width:28px;height:3px;background:var(--text);border-radius:2px;
+    transition:all 0.3s cubic-bezier(0.4,0,0.2,1);}
+  .menu-toggle.active span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+  .menu-toggle.active span:nth-child(2){opacity:0;transform:scaleX(0);}
+  .menu-toggle.active span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+  .menu-toggle:hover{box-shadow:0 0 20px rgba(180,200,255,0.4);transform:scale(1.05);}
+  .menu-toggle:active{transform:scale(0.95);}
+  
+  #ui-toggle{top:12px;left:12px;}
+  #hud-toggle{top:12px;right:12px;}
+  
+  .ui{
+    position:fixed;left:12px;top:72px;width:min(560px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+    z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:10px 12px;backdrop-filter:blur(8px);overflow-y:auto;
+    transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top left;
+  }
+  .ui.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+  .ui h1{font-size:13px;margin:0 0 8px 0;}
+  .ui p{margin:6px 0;font-size:11px;line-height:1.5;color:var(--muted);}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;}
+  .row label{width:100%;font-size:11px;color:var(--muted);}
+  input[type="range"], select, button{
+    width:100%;border:1px solid var(--border);background:rgba(0,0,0,0.25);
+    color:var(--text);border-radius:10px;padding:8px 10px;font-size:12px;outline:none;min-height:44px;
+  }
+  button{cursor:pointer;transition:all 0.2s ease;}
+  button:active{transform:scale(0.98);}
+  
+  .hud{
+    position:fixed;right:12px;top:72px;width:min(620px, calc(100vw - 24px));max-height:calc(100vh - 84px);
+    z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:10px 12px;backdrop-filter:blur(8px);overflow-y:auto;
+    font-family:var(--mono);font-size:11px;line-height:1.35;color:var(--muted);
+    white-space:pre-wrap;transition:all 0.4s cubic-bezier(0.4,0,0.2,1);transform-origin:top right;
+  }
+  .hud.hidden{transform:translateY(-20px) scale(0.9);opacity:0;pointer-events:none;visibility:hidden;}
+  .err{
+    position:fixed;left:12px;right:12px;bottom:12px;z-index:20;
+    background: rgba(255,80,80,0.12); border: 1px solid rgba(255,80,80,0.35);
+    color: #ffd6d6; border-radius: 14px; padding: 10px 12px; font-size: 12px; font-family: var(--mono);
+    white-space: pre-wrap; display:none;
+  }
+  .kbd{font-family:var(--mono);border:1px solid var(--border);padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.05);}
+  
+  /* レスポンシブ対応 */
+  @media (max-width: 768px) {
+    .menu-toggle{width:45px;height:45px;}
+    .ui,.hud{max-width:calc(100vw - 84px);}
+  }
+  
+  @media (max-width: 480px) {
+    .menu-toggle{width:40px;height:40px;}
+    .menu-toggle span{width:24px;}
+    #ui-toggle,#hud-toggle{top:10px;}
+    #ui-toggle{left:10px;}
+    #hud-toggle{right:10px;}
+    .ui{left:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(100vh - 70px);}
+    .hud{right:10px;top:60px;max-width:calc(100vw - 20px);max-height:calc(50vh);}
+    .ui h1{font-size:12px;}
+    .ui p,.row label{font-size:10px;}
+    .hud{font-size:10px;}
+  }
+  
+  /* タッチデバイス対応 */
+  @media (hover: none) {
+    input[type="range"]{height:8px;}
+    button:hover{box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<!-- ハンバーガーメニューボタン -->
+<div id="ui-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+<div id="hud-toggle" class="menu-toggle">
+  <span></span>
+  <span></span>
+  <span></span>
+</div>
+
+<div class="ui hidden">
+  <h1>v8: BH形成の直前→直後を 3Dで統合可視化（ring/shadow/holonomy/folding）</h1>
+  <p>
+    <span class="kbd">drag</span> rotate, <span class="kbd">wheel</span> zoom,
+    <span class="kbd">space</span> pause, <span class="kbd">R</span> reset
+  </p>  <div class="row">
+    <label>Mode</label>
+    <select id="mode">
+      <option value="auto">Auto (300s monotone)</option>
+      <option value="manual">Manual time scrub</option>
+    </select>
+  </div>  <div class="row">
+    <label>Manual time (0..300s)</label>
+    <input id="tScrub" type="range" min="0" max="300" step="0.1" value="0">
+  </div>  <div class="row">
+    <label>α coupling (defect energy scale)</label>
+    <input id="alpha" type="range" min="0" max="1" step="0.001" value="0.62">
+  </div>  <div class="row">
+    <label>ρStrength (holonomy / phase twist strength)</label>
+    <input id="rhos" type="range" min="0" max="1" step="0.001" value="0.58">
+  </div>  <div class="row">
+    <label>Photon sampling density</label>
+    <input id="density" type="range" min="0.3" max="2.0" step="0.01" value="1.0">
+  </div>  <div class="row">
+    <label>Photon ring sharpness (focus near b_c)</label>
+    <input id="sharp" type="range" min="0" max="1" step="0.001" value="0.75">
+  </div>  <div class="row">
+    <label>Folding depth (throat)</label>
+    <input id="fold" type="range" min="0.2" max="2.0" step="0.01" value="1.0">
+  </div>  <div class="row">
+    <button id="reset">Reset</button>
+  </div>  <p>
+    本実装は “screen投影”を廃止。光線を 3D点列として蓄積し、ring/shadow を密度で生成します。<br>
+    位相（holonomy）は複数ループで半径依存に観測され、throatの対数的ねじれを可視化します。
+  </p>
+</div>
+
+<div class="hud hidden" id="hud"></div>
+<div class="err" id="err"></div><script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script><script>
+(() => {
+  const errBox = document.getElementById('err');
+  function fail(msg){ errBox.style.display='block'; errBox.textContent = msg; }
+  if(!window.THREE){ fail("Three.js failed to load. Try another network / allow unpkg.com."); return; }
+
+  // ハンバーガーメニューの制御
+  const uiPanel = document.querySelector('.ui');
+  const uiToggle = document.getElementById('ui-toggle');
+  const hudPanel = document.querySelector('.hud');
+  const hudToggle = document.getElementById('hud-toggle');
+
+  uiToggle.addEventListener('click', () => {
+    const isHidden = uiPanel.classList.contains('hidden');
+    if (isHidden) {
+      uiPanel.classList.remove('hidden');
+      uiToggle.classList.add('active');
+    } else {
+      uiPanel.classList.add('hidden');
+      uiToggle.classList.remove('active');
+    }
+  });
+
+  hudToggle.addEventListener('click', () => {
+    const isHidden = hudPanel.classList.contains('hidden');
+    if (isHidden) {
+      hudPanel.classList.remove('hidden');
+      hudToggle.classList.add('active');
+    } else {
+      hudPanel.classList.add('hidden');
+      hudToggle.classList.remove('active');
+    }
+  });
+
+  const canvas = document.getElementById('c');
+  const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+  if(!gl){ fail("WebGL is not available in this environment."); return; }
+
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setClearColor(0x050812, 1);
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x050812, 80, 520);
+
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 1200);
+  function resize(){
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xaec2ff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(30, 50, 35);
+  scene.add(key);
+
+  // Always-visible baseline objects (prevents "blank screen")
+  const axes = new THREE.AxesHelper(30);
+  axes.material.transparent=true; axes.material.opacity=0.35;
+  scene.add(axes);
+  const grid = new THREE.GridHelper(900, 180, 0x33407a, 0x1c244a);
+  grid.material.transparent=true; grid.material.opacity=0.22;
+  scene.add(grid);
+  const originBall = new THREE.Mesh(
+    new THREE.SphereGeometry(2, 24, 24),
+    new THREE.MeshStandardMaterial({color:0x7aa7ff, emissive:0x0a122a, emissiveIntensity:0.9, transparent:true, opacity:0.65})
+  );
+  originBall.position.set(0,0,0);
+  scene.add(originBall);
+
+  // Controls (simple orbit)
+  const cam = {drag:false, px:0, py:0, theta:0.95, phi:1.02, radius:260};
+  function updateCam(){
+    cam.phi = Math.max(0.18, Math.min(Math.PI-0.18, cam.phi));
+    const x = cam.radius*Math.sin(cam.phi)*Math.cos(cam.theta);
+    const z = cam.radius*Math.sin(cam.phi)*Math.sin(cam.theta);
+    const y = cam.radius*Math.cos(cam.phi);
+    camera.position.set(x,y,z);
+    camera.lookAt(0,0,0);
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    cam.drag=true; cam.px=e.clientX; cam.py=e.clientY; canvas.setPointerCapture(e.pointerId); canvas.focus();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!cam.drag) return;
+    const dx=e.clientX-cam.px, dy=e.clientY-cam.py;
+    cam.px=e.clientX; cam.py=e.clientY;
+    cam.theta -= dx*0.006;
+    cam.phi   -= dy*0.006;
+  });
+  canvas.addEventListener('pointerup', ()=>cam.drag=false);
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const s = Math.exp(e.deltaY*0.0012);
+    cam.radius = Math.max(120, Math.min(640, cam.radius*s));
+  }, {passive:false});
+
+  // Utils
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const TAU=Math.PI*2;
+  function smoothstep(x){ x=clamp(x,0,1); return x*x*(3-2*x); }
+  function hsvToRgb(h,s,v){
+    const c=v*s;
+    const hp=(h%1)*6;
+    const x=c*(1-Math.abs((hp%2)-1));
+    let r=0,g=0,b=0;
+    if(hp<1){r=c;g=x;}
+    else if(hp<2){r=x;g=c;}
+    else if(hp<3){g=c;b=x;}
+    else if(hp<4){g=x;b=c;}
+    else if(hp<5){r=x;b=c;}
+    else {r=c;b=x;}
+    const m=v-c;
+    return {r:r+m,g:g+m,b:b+m};
+  }
+  function logistic(x){ return 1/(1+Math.exp(-x)); }
+  function visibility(r, Rs, w){ return logistic((r-Rs)/Math.max(1e-6,w)); }
+
+  function quatFromAxisAngle(axis, ang){
+    const v=axis.clone().normalize();
+    const s=Math.sin(ang/2);
+    return new THREE.Quaternion(v.x*s, v.y*s, v.z*s, Math.cos(ang/2));
+  }
+  function quatToAxisAngle(q){
+    const qw=q.w;
+    const ang=2*Math.acos(clamp(qw,-1,1));
+    const s=Math.sqrt(Math.max(0,1-qw*qw));
+    if(s<1e-8) return {axis:new THREE.Vector3(1,0,0), angle:0};
+    return {axis:new THREE.Vector3(q.x/s,q.y/s,q.z/s), angle:ang};
+  }
+
+  // 300s monotone schedule: Excess(t) rises monotonically
+  const Ttotal=300.0;
+  function ExcessOfS(s){
+    const x=(s-0.25)/0.12;
+    const sig=1/(1+Math.exp(-x));
+    return 0.30 + 0.65*sig;
+  }
+  function quantizePlateau(x){
+    const steps=7;
+    const y=x*steps;
+    const k=Math.floor(y);
+    const f=y-k;
+    const ss=smoothstep(f);
+    return (k+ss)/steps;
+  }
+
+  const sim = {
+    t:0, s:0, E:0.30,
+    alphaCoupling:0.62,
+    rhoS:0.58,
+    alphaDef:0, rDef:2.2, omega:0,
+    Rs:0, grav:0, B:0,
+    qHol: new THREE.Quaternion(0,0,0,1),
+    _gravPrev:0
+  };
+
+  // Horizon and core
+  const horizon = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 72, 72),
+    new THREE.MeshStandardMaterial({color:0x0b142e, metalness:0.15, roughness:0.22, transparent:true, opacity:0.0})
+  );
+  scene.add(horizon);
+
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 72, 72),
+    new THREE.MeshStandardMaterial({color:0xff6b6b, emissive:0x220000, emissiveIntensity:1.3, transparent:true, opacity:0.0})
+  );
+  scene.add(core);
+
+  // Folding sheet: use polar grid deformation with throat-like log
+  const sheetGeo = new THREE.PlaneGeometry(900,900, 260,260);
+  const sheetMat = new THREE.MeshStandardMaterial({color:0x10183a, emissive:0x070c1f, emissiveIntensity:0.8, wireframe:true, transparent:true, opacity:0.22});
+  const sheet = new THREE.Mesh(sheetGeo, sheetMat);
+  sheet.rotation.x=-Math.PI/2;
+  sheet.position.y=-110;
+  scene.add(sheet);
+
+  // Loop family for holonomy observation (3 radii)
+  function makeLoop(R, color){
+    const tor = new THREE.Mesh(
+      new THREE.TorusGeometry(R, 1.2, 16, 240),
+      new THREE.MeshStandardMaterial({color, emissive:0x0d1635, emissiveIntensity:0.55, transparent:true, opacity:0.0})
+    );
+    tor.position.set(0, 26, 0);
+    return tor;
+  }
+  const loops = [
+    makeLoop(70,0x7aa7ff),
+    makeLoop(52,0x6bffb3),
+    makeLoop(36,0xffcc66)
+  ];
+  loops.forEach(o=>scene.add(o));
+
+  // EM lines (fibration-like)
+  const emN=2400;
+  const emGeo = new THREE.BufferGeometry();
+  emGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(emN*2*3),3));
+  emGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(emN*2*3),3));
+  const emMat = new THREE.LineBasicMaterial({vertexColors:true, transparent:true, opacity:0.0});
+  const emLines = new THREE.LineSegments(emGeo, emMat);
+  scene.add(emLines);
+
+  // Photon ring cloud: points from geodesic-like integration
+  const cloudN=160000;
+  const cloudGeo = new THREE.BufferGeometry();
+  cloudGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cloudN*3),3));
+  cloudGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cloudN*3),3));
+  const cloudMat = new THREE.PointsMaterial({size:0.6, vertexColors:true, transparent:true, opacity:0.65, depthWrite:false});
+  const cloud = new THREE.Points(cloudGeo, cloudMat);
+  scene.add(cloud);
+  let cloudWrite=0;
+
+  // Schwarzschild-like photon integrator in plane (surrogate)
+  // We integrate u=1/r vs phi: du/dphi = sqrt(1/b^2 - u^2 + 2Mu^3) (sign)
+  // We'll do a simple forward integration from large r toward smaller r, and record points.
+  function tracePhoton(M, b, phiMax, steps){
+    // start from r0 large => u ~ 0
+    let u = 1/260; // r0 = 260
+    let phi = 0;
+    let sign = 1;
+    const pts=[];
+    let captured=false;
+    // horizon in this surrogate: Rs=2M
+    const Rs = 2*M;
+    for(let i=0;i<steps;i++){
+      const r = 1/u;
+      if(r <= Rs*1.001){ captured=true; break; }
+      const rhs = (1/(b*b)) - u*u + 2*M*u*u*u;
+      if(rhs < 0){
+        // turning point: reflect
+        sign *= -1;
+        // small nudge
+        u *= 0.999;
+      } else {
+        const du = sign*Math.sqrt(rhs)*(phiMax/steps);
+        u += du;
+      }
+      phi += (phiMax/steps);
+      // record in plane (x,z)
+      const rr = 1/u;
+      pts.push({r:rr, phi});
+      if(phi > phiMax) break;
+      // escape if r becomes huge
+      if(rr > 600) break;
+    }
+    // winding number approx
+    const wind = phi/(TAU);
+    return {pts, captured, wind};
+  }
+
+  function updateModel(dt){
+    sim.alphaCoupling = Number(document.getElementById('alpha').value);
+    sim.rhoS = Number(document.getElementById('rhos').value);
+
+    const mode=document.getElementById('mode').value;
+    if(mode==='manual'){
+      sim.t = Number(document.getElementById('tScrub').value);
+    } else {
+      sim.t = Math.min(Ttotal, sim.t + dt);
+      document.getElementById('tScrub').value = sim.t.toFixed(1);
+    }
+
+    sim.s = clamp(sim.t/Ttotal, 0, 1);
+    sim.E = ExcessOfS(sim.s);
+
+    const thr=0.52;
+    const x = clamp((sim.E-thr)/(1-thr), 0, 1);
+    const aq = quantizePlateau(x);
+
+    sim.alphaDef = sim.alphaCoupling*(0.10 + 1.25*aq);
+    sim.rDef = clamp(2.4 - 2.0*x, 0.26, 2.4);
+    sim.omega = sim.alphaDef/(sim.rDef*sim.rDef + 1e-6);
+
+    sim.grav = sim.omega;
+
+    const form = smoothstep((sim.s-0.36)/0.34);
+    const M = (12 + 30*Math.tanh(0.16*sim.grav))*form; // mass parameter (world units)
+    sim.Rs = 2*M;
+
+    // holonomy quaternion update
+    const axis = new THREE.Vector3(
+      Math.sin(sim.t*0.02+0.2),
+      Math.cos(sim.t*0.017+1.1),
+      Math.sin(sim.t*0.023-0.7)
+    ).normalize();
+    const angVel = (0.06 + 0.28*sim.rhoS)*(0.10 + 0.25*sim.grav);
+    sim.qHol.premultiply(quatFromAxisAngle(axis, dt*angVel)).normalize();
+
+    // EM proxy
+    sim.B = angVel*sim.grav;
+
+    return {M};
+  }
+
+  function updateSheet(M){
+    const fold = Number(document.getElementById('fold').value);
+    const pos=sheet.geometry.attributes.position;
+    const Rs=Math.max(1e-3, sim.Rs);
+    const a = 65*fold*(0.10 + 0.40*sim.grav); // depth scale
+    const clip = -180;
+
+    for(let i=0;i<pos.count;i++){
+      const x=pos.getX(i);
+      const z=pos.getY(i);
+      const r=Math.sqrt(x*x+z*z)+1e-6;
+
+      // optical throat-like embedding: z ~ -a log(r/Rs - 1)
+      let zz = 0;
+      if(r>Rs*1.02){
+        zz = -a*Math.log((r/Rs)-1);
+      } else {
+        zz = clip;
+      }
+
+      // mild curvature ripples
+      zz += 2.2*Math.sin(0.008*x + 0.010*z + 0.010*sim.t);
+
+      // map to plane coords (keep x,z, set height)
+      pos.setX(i, x);
+      pos.setY(i, z);
+      pos.setZ(i, Math.max(clip, Math.min(80, zz)));
+    }
+    pos.needsUpdate=true;
+  }
+
+  function updateCenter(M){
+    const form = smoothstep((sim.s-0.30)/0.35);
+    core.material.opacity = 0.08 + 0.85*form;
+    core.scale.setScalar(8 + 16*sim.rDef);
+    core.material.emissiveIntensity = 1.1 + 1.5*Math.tanh(0.14*sim.grav);
+
+    horizon.material.opacity = 0.10 + 0.70*form;
+    horizon.scale.setScalar(Math.max(0.01, sim.Rs));
+  }
+
+  function updateHolonomyLoops(){
+    const show = smoothstep((sim.s-0.38)/0.32);
+    loops.forEach(l=>{ l.material.opacity = 0.05 + 0.75*show; });
+
+    // holonomy angle depends on loop radius with log throat-like term
+    const Rs=Math.max(1e-3, sim.Rs);
+    const aa=quatToAxisAngle(sim.qHol);
+    const base = (aa.angle/TAU)%1.0;
+
+    loops.forEach((l,idx)=>{
+      const R = l.geometry.parameters.radius;
+      const logTerm = Math.log(Math.max(1.0001, R/Math.max(1.0,Rs))); // scale-dependent
+      const h = (base + 0.06*sim.rhoS*sim.grav*logTerm + 0.11*idx) % 1.0;
+      const rgb=hsvToRgb(h, 0.85, 0.85);
+      l.material.color.setRGB(rgb.r,rgb.g,rgb.b);
+      // rotate loops by holonomy quaternion (visual)
+      l.quaternion.copy(sim.qHol);
+      // small additional twist
+      l.rotation.y += 0.03*idx;
+    });
+  }
+
+  function updateEM(){
+    const show = smoothstep((sim.s-0.40)/0.30);
+    emMat.opacity = 0.02 + 0.60*show*Math.tanh(0.9*sim.B);
+
+    const p=emLines.geometry.attributes.position.array;
+    const c=emLines.geometry.attributes.color.array;
+
+    const aa=quatToAxisAngle(sim.qHol);
+    const axis=aa.axis.clone().normalize();
+    const intensity = clamp(sim.B*2.2, 0, 1);
+
+    const tmp = Math.abs(axis.y)<0.9 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0);
+    const e1 = new THREE.Vector3().crossVectors(axis,tmp).normalize();
+    const e2 = new THREE.Vector3().crossVectors(axis,e1).normalize();
+
+    const baseR=Math.max(1e-3, sim.Rs)*1.25 + 24;
+
+    for(let i=0;i<emN;i++){
+      const t0=(i/emN)*TAU*14.0;
+      const t1=t0+0.25;
+
+      const rad = baseR*(0.75 + 0.25*Math.sin(0.10*t0 + 0.014*sim.t))*(0.75+0.45*intensity);
+      const pitch = 0.50*baseR;
+
+      const u0=Math.cos(t0)*rad, v0=Math.sin(t0)*rad;
+      const u1=Math.cos(t1)*rad, v1=Math.sin(t1)*rad;
+
+      const w0=pitch*Math.sin(0.04*t0);
+      const w1=pitch*Math.sin(0.04*t1);
+
+      const P0 = new THREE.Vector3().addScaledVector(e1,u0).addScaledVector(e2,v0).addScaledVector(axis,w0).add(new THREE.Vector3(0,26,0));
+      const P1 = new THREE.Vector3().addScaledVector(e1,u1).addScaledVector(e2,v1).addScaledVector(axis,w1).add(new THREE.Vector3(0,26,0));
+
+      const idx=i*6;
+      p[idx+0]=P0.x; p[idx+1]=P0.y; p[idx+2]=P0.z;
+      p[idx+3]=P1.x; p[idx+4]=P1.y; p[idx+5]=P1.z;
+
+      const h=((aa.angle/TAU)+0.02*Math.sin(t0))%1.0;
+      const rgb=hsvToRgb(h, 0.85, clamp(0.30+0.70*intensity,0,1));
+      c[idx+0]=rgb.r; c[idx+1]=rgb.g; c[idx+2]=rgb.b;
+      c[idx+3]=rgb.r; c[idx+4]=rgb.g; c[idx+5]=rgb.b;
+    }
+    emLines.geometry.attributes.position.needsUpdate=true;
+    emLines.geometry.attributes.color.needsUpdate=true;
+  }
+
+  function updatePhotonCloud(M){
+    const density = Number(document.getElementById('density').value);
+    const sharp = Number(document.getElementById('sharp').value);
+
+    // critical impact parameter b_c = 3sqrt(3) M, photon sphere r=3M
+    const bc = 3*Math.sqrt(3)*Math.max(1e-3,M);
+    const rph = 3*Math.max(1e-3,M);
+
+    // sampling: concentrate b around b_c to sharpen ring
+    const NperFrame = Math.floor(280*density);
+    const steps = 240;
+    const phiMax = 24*Math.PI; // allow many windings near critical
+
+    const pos=cloud.geometry.attributes.position.array;
+    const col=cloud.geometry.attributes.color.array;
+
+    // visibility: inside horizon dims strongly
+    const Rs=Math.max(1e-6, sim.Rs);
+    const w = 10 + 26*(1-smoothstep((sim.s-0.55)/0.35));
+
+    const aa=quatToAxisAngle(sim.qHol);
+    const axis=aa.axis.clone().normalize();
+
+    // choose an orthonormal basis for rotating planar rays into 3D
+    const tmp = Math.abs(axis.y)<0.9 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0);
+    const e1 = new THREE.Vector3().crossVectors(axis,tmp).normalize();
+    const e2 = new THREE.Vector3().crossVectors(axis,e1).normalize();
+
+    for(let i=0;i<NperFrame;i++){
+      // sample b: mixture of near-critical and broader
+      const u=Math.random();
+      const spread = lerp(0.35, 0.06, sharp);
+      const b = (u<0.75)
+        ? bc*(1 + spread*(Math.random()*2-1)) // near bc
+        : bc*(1 + 2.0*(Math.random()*2-1));  // broader
+
+      const tr = tracePhoton(Math.max(1e-3,M), Math.abs(b), phiMax, steps);
+
+      // map the planar curve into 3D: use e1,e2 plane, keep y offset
+      // we also rotate the plane slightly per-ray to create a 3D volume
+      const planeRot = (Math.random()*2-1)*0.9;
+      const q = quatFromAxisAngle(axis, planeRot);
+      const pe1 = e1.clone().applyQuaternion(q);
+      const pe2 = e2.clone().applyQuaternion(q);
+
+      // brightness weight: more windings => brighter (photon ring)
+      const wind = tr.wind;
+      const ringBoost = clamp(0.08 + 0.10*Math.log(1+wind), 0.08, 0.55);
+
+      // encode winding count as discrete hue bands (nLift-like)
+      const n = Math.floor(wind); // integer winding
+      const hueBand = ((n % 8)/8); // 8-color cycle
+
+      for(const pt of tr.pts){
+        const r = pt.r;
+        const phi = pt.phi;
+
+        // place point
+        const xx = r*Math.cos(phi);
+        const zz = r*Math.sin(phi);
+        const P = new THREE.Vector3().addScaledVector(pe1, xx).addScaledVector(pe2, zz);
+
+        // dim inside horizon
+        const rr = P.length();
+        const vis = (sim.s>0.36) ? visibility(rr, Rs, w) : 1.0;
+
+        // extra bright near photon sphere radius
+        const phWeight = Math.exp(-((r-rph)*(r-rph))/(2*(8+18*(1-sharp))**2));
+        const val = clamp(ringBoost*(0.35+0.65*phWeight)*vis, 0, 1);
+
+        // saturation from EM proxy
+        const sat = clamp(0.35 + 0.65*Math.tanh(0.8*sim.B), 0, 1);
+
+        // hue from discrete band + holonomy angle
+        const hue = (hueBand + 0.10*(aa.angle/TAU))%1.0;
+        const rgb = hsvToRgb(hue, sat, val);
+
+        const idx = (cloudWrite % cloudN)*3;
+        pos[idx+0]=P.x;
+        pos[idx+1]=P.y;
+        pos[idx+2]=P.z;
+        col[idx+0]=rgb.r;
+        col[idx+1]=rgb.g;
+        col[idx+2]=rgb.b;
+        cloudWrite++;
+      }
+    }
+
+    cloud.geometry.attributes.position.needsUpdate=true;
+    cloud.geometry.attributes.color.needsUpdate=true;
+
+    cloudMat.opacity = 0.10 + 0.70*smoothstep((sim.s-0.30)/0.30);
+  }
+
+  // HUD
+  const hud=document.getElementById('hud');
+  function hudText(){
+    const aa=quatToAxisAngle(sim.qHol);
+    return [
+      "v8: integrated 3D BH formation (pre→post), improved ring/shadow/holonomy/folding",
+      `t=${sim.t.toFixed(1)}s / 300s  s=${sim.s.toFixed(3)}  mode=${document.getElementById('mode').value}`,
+      `Excess≈${sim.E.toFixed(4)}  α=${sim.alphaDef.toFixed(4)}  r=${sim.rDef.toFixed(4)}  Ω=α/r²=${sim.omega.toFixed(4)}`,
+      `M≈${(sim.Rs/2).toFixed(2)}  Rs=2M≈${sim.Rs.toFixed(2)}  photon sphere r_ph≈${(3*(sim.Rs/2)).toFixed(2)}  b_c≈${(3*Math.sqrt(3)*(sim.Rs/2)).toFixed(2)}`,
+      `B=${sim.B.toFixed(4)}  holonomy angle≈${aa.angle.toFixed(3)} rad`,
+      "",
+      "encoding:",
+      "- photon ring/shadow: density of geodesic-like points; discrete hue bands encode winding number (nLift-like)",
+      "- horizon invisibility: logistic visibility(r;Rs,w) dims inside Rs",
+      "- holonomy: loop family colors depend on log(R/Rs) (throat-like phase delay)",
+      "- folding: sheet z(r) ~ -a log(r/Rs - 1) (optical throat surrogate)"
+    ].join("\n");
+  }
+
+  // Pause/reset
+  let paused=false;
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space') paused=!paused;
+    if(e.key==='r' || e.key==='R'){
+      sim.t=0; sim.s=0; sim._gravPrev=0;
+      sim.qHol.identity();
+      document.getElementById('tScrub').value="0";
+      // clear cloud buffer
+      cloudWrite=0;
+      const pos=cloud.geometry.attributes.position.array;
+      const col=cloud.geometry.attributes.color.array;
+      for(let i=0;i<pos.length;i++) pos[i]=0;
+      for(let i=0;i<col.length;i++) col[i]=0;
+      cloud.geometry.attributes.position.needsUpdate=true;
+      cloud.geometry.attributes.color.needsUpdate=true;
+    }
+  });
+  document.getElementById('reset').addEventListener('click', ()=>{
+    sim.t=0; sim.s=0; sim._gravPrev=0;
+    sim.qHol.identity();
+    document.getElementById('tScrub').value="0";
+  });
+
+  let last=performance.now();
+  function frame(now){
+    const dt = Math.min(0.033, (now-last)/1000);
+    last=now;
+
+    updateCam();
+
+    let M={M:0};
+    if(!paused){
+      M = updateModel(dt);
+    } else {
+      M = updateModel(0);
+    }
+
+    updateSheet(M.M);
+    updateCenter(M.M);
+    updateHolonomyLoops();
+    updateEM();
+    updatePhotonCloud(M.M);
+
+    hud.textContent = hudText();
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+})();
+</script></body>
+</html>

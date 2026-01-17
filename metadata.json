@@ -14,6 +14,16 @@
       "date": "2025-01-01",
       "thumbnail": null,
       "icon": "∮"
+    },
+    {
+      "id": "bh-formation-3d",
+      "title": "Black Hole Formation: Ring/Shadow/Holonomy",
+      "description": "ブラックホール形成の前後を3Dで統合可視化。光子リング、事象の地平線、ホロノミー効果、時空の折り畳み構造を、一般相対性理論に基づいて表現します。",
+      "path": "./works/bh-bench/work-1/index.html",
+      "tags": ["General Relativity", "Black Hole", "3D Visualization", "Three.js", "Geodesics"],
+      "date": "2025-01-17",
+      "thumbnail": null,
+      "icon": "◉"
     }
   ]
 }
