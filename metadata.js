@@ -79,6 +79,26 @@ const METADATA = {
       date: "2025-01-17",
       thumbnail: null,
       icon: "⊚"
+    },
+    {
+      id: "gpu-horizon-hole",
+      title: "GPU Horizon Hole: Fragment Shader Event Horizon",
+      description: "GPUシェーダーで事象の地平線を本物の「穴」として実装（fragment discard）。境界層での急峻な隆起、光子リングの自然な創発、リアルタイムの動的パラメータ変化を完全にGPU上で実現します。",
+      path: "./works/bh-bench/work-3/v4/index.html",
+      tags: ["GPU Computing", "GLSL Shader", "Black Hole", "Event Horizon", "3D Visualization", "Three.js", "Real-time Physics"],
+      date: "2025-01-17",
+      thumbnail: null,
+      icon: "⬤"
+    },
+    {
+      id: "translucent-volume-slices",
+      title: "Translucent Volume Slices: Field-Dependent Opacity",
+      description: "場の強度に応じた動的透明度により、6枚のスライスを体積的サンプリングとして扱う。depthWrite無効化と微小ジッターにより、硬い壁を排除し、滑らかな3D場の可視化を実現します。",
+      path: "./works/bh-bench/work-3/v5/index.html",
+      tags: ["Volume Rendering", "GPU Computing", "GLSL Shader", "Field Theory", "3D Visualization", "Three.js", "Adaptive Opacity"],
+      date: "2025-01-17",
+      thumbnail: null,
+      icon: "◌"
     }
     // 新しい作品をここに追加
     // 例:
